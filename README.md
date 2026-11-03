@@ -17,13 +17,34 @@ raw/ 에 원문 투입          →  LLM 변환  →  wiki/ 원자 노트  →  
 - **문서 추출 + OCR** — PDF/Word/Excel/PPT/HTML, 스캔 PDF·이미지는 Apple Vision OCR (오프라인)
 - **노트 양식(템플릿)** — `wiki/.templates/*.md` 로 frontmatter·섹션 구조 지정
 
-## 설치용 오프라인 번들 내려받기
+## 두 가지 번들
 
-설치에 필요한 **wheel 저장소(~834MB)를 포함한 완성 번들**은
-[**Releases**](../../releases) 에서 받습니다. (저장소에는 소스만 있습니다 — 아래 참조)
+| 번들 | 구성 | 문서 |
+| --- | --- | --- |
+| openwebui-wiki 번들 (저장소 루트) | Open WebUI + wiki-mcp | [`INSTALL.md`](INSTALL.md) |
+| 통합 번들 ([`guardian/`](guardian/)) | LM Studio(앱·모델) + Open WebUI + wiki-mcp + Claude Code(`claude-lms`) | [`guardian/README.md`](guardian/README.md), [`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md) |
+
+## 완성 번들은 직접 만든다
+
+이 저장소에는 **소스와 빌드 스크립트만** 있고, 내려받을 완성 번들(Release)은 없습니다.
+wheel 저장소(~834MB)·모델·LM Studio dmg 같은 대용량 바이너리는 git에 넣지 않습니다.
+인터넷이 되는 빌드 Mac에서 번들을 만든 뒤 대상 Mac으로 옮깁니다.
+
+**openwebui-wiki 번들** — `openwebui-packages/`(macOS arm64, cp311·cp312 wheel)를 채운 뒤 `./package.sh`.
 
 ```bash
-# Releases에서 tar.gz + .sha256 다운로드 후
+# 빌드 Mac (macOS arm64 · Python 3.12 · 인터넷 연결) — 예시. 보충 wheel 목록은 INSTALL.md 부록 참고
+python3.12 -m pip download open-webui==0.12.3 mcpo==0.0.20 ./wiki-mcp -d openwebui-packages
+./package.sh                        # → dist/openwebui-wiki-bundle-<버전>-macos-arm64.tar.gz (+ .sha256)
+```
+
+**통합 번들** — server-guardian 의 `build-llm-bundle.sh` 가 만든 번들과 공식 LM Studio dmg 를
+`guardian/build-merged-bundle.sh` 로 합칩니다. `build-llm-bundle.sh` 는 이 저장소에 없습니다.
+자세한 절차는 [`guardian/README.md`](guardian/README.md).
+
+만든 openwebui-wiki 번들을 대상 Mac에 옮겨 설치합니다.
+
+```bash
 shasum -a 256 -c openwebui-wiki-bundle-<버전>-macos-arm64.tar.gz.sha256
 tar -xzf openwebui-wiki-bundle-<버전>-macos-arm64.tar.gz
 cd openwebui-wiki-bundle-<버전>-macos-arm64
@@ -77,9 +98,11 @@ load-env.sh           # .env 로더 (공용)
 ```
 
 > **`openwebui-packages/`(wheel ~834MB)와 배포 tar.gz는 저장소에 포함하지 않습니다.**
-> 대용량 바이너리는 git에 부적합하므로 **릴리스 아티팩트로 배포**합니다.
+> 대용량 바이너리는 git에 부적합하므로 빌드 Mac에서 만들어 옮깁니다(위 "완성 번들은 직접 만든다").
 
 ## 배포 (관리자)
+
+관리자가 자기 Gitea 서버의 Release에 번들을 올리는 절차입니다.
 
 ```bash
 ./package.sh     # 번들(tar.gz + 체크섬) 생성 → dist/
