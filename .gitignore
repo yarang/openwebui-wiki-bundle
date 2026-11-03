@@ -1,0 +1,52 @@
+# ── 대용량 / 재생성 가능 (git에 담지 않음) ──
+# openwebui-packages: 오프라인 wheel 저장소(~840MB) — 릴리스 아티팩트로 배포
+openwebui-packages/
+# dist: 패키징 산출물 (tar.gz)
+dist/
+# .venv: 가상환경 (install.sh로 재생성)
+.venv/
+
+# ── 빌드 산출물 ──
+# ocr/vision-ocr: Swift 컴파일 결과 (package.sh가 소스에서 자동 빌드)
+ocr/vision-ocr
+# wiki-mcp/build: pip wheel 빌드 중간물 (guardian/build-merged-bundle.sh가 생성)
+wiki-mcp/build/
+__pycache__/
+*.pyc
+*.egg-info/
+# 테스트 커버리지 산출물
+.coverage
+.pytest_cache/
+htmlcov/
+
+# ── 런타임 생성 데이터 ──
+# wiki-data: 검색 인덱스 (재인덱싱으로 복구)
+wiki-data/
+wiki-mcp/data/
+raw/.processed/
+raw/.failed/
+# backups: apply-patch.sh 가 만드는 패치 롤백 스냅샷
+backups/
+*.bak
+*.bak.*
+# test-docgen.py / fill_template.py 실행 산출물
+test-output/
+filled-output/
+
+# ── 시크릿 (토큰은 저장소 밖 ~/.config/gitea/example.env 에 두는 것을 권장) ──
+.env
+*.env
+!.env.example
+.gitea.env
+.netrc
+.agent_forge_for_zai.json
+
+# ── 로컬 설정 / OS ──
+.claude/
+.webui_secret_key
+.DS_Store
+# wiki/.obsidian: Obsidian 로컬 편집기 설정 (개인별 환경, 공유 불필요)
+wiki/.obsidian/
+
+# Office 임시 잠금 파일
+~$*

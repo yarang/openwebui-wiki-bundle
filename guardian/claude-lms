@@ -1,0 +1,95 @@
+#!/bin/bash
+# ==============================================================================
+# claude-lms: Claude Code on this Mac's LM Studio, with no Anthropic account and nothing sent off the Mac
+#
+# Usage:  claude-lms [claude options and prompt]      e.g. claude-lms, claude-lms -p "explain this repo"
+# Settings come from ~/.config/claude-lms/env (written by install-claude-code.sh); the same names set in the
+# environment win:
+#   CLAUDE_LMS_MODEL     LM Studio model id (one /v1/models lists), e.g. google/gemma-4-e4b
+#   CLAUDE_LMS_URL       LM Studio server (default http://127.0.0.1:1234)
+#   CLAUDE_LMS_CONTEXT   least context length the model must be loaded with (default 65536)
+# Claude Code's system prompt and tools alone are ~10k tokens and a JIT load gets LM Studio's default context
+# (4096 or 8192), which cuts the prompt and leaves the model answering nonsense. So the model is loaded here with
+# CLAUDE_LMS_CONTEXT when it is not loaded yet, and Claude Code compacts the conversation within the loaded context.
+# ==============================================================================
+
+set -euo pipefail
+
+CONF="${XDG_CONFIG_HOME:-${HOME}/.config}/claude-lms/env"
+# The environment wins over the file: keep what was set before sourcing it.
+_m="${CLAUDE_LMS_MODEL:-}"; _u="${CLAUDE_LMS_URL:-}"; _c="${CLAUDE_LMS_CONTEXT:-}"
+# shellcheck disable=SC1090
+if [ -f "${CONF}" ]; then . "${CONF}"; fi
+MODEL="${_m:-${CLAUDE_LMS_MODEL:-}}"
+URL="${_u:-${CLAUDE_LMS_URL:-http://127.0.0.1:1234}}"
+CTX="${_c:-${CLAUDE_LMS_CONTEXT:-65536}}"
+URL="${URL%/}"
+LMS="${HOME}/.lmstudio/bin/lms"
+CLAUDE="${HOME}/.local/bin/claude"
+
+die() { echo "claude-lms: $*" >&2; exit 1; }
+
+[ -n "${MODEL}" ] || die "no model: set CLAUDE_LMS_MODEL in ${CONF} (an id from: curl -s ${URL}/v1/models)"
+[ -x "${CLAUDE}" ] || CLAUDE="$(command -v claude || true)"
+[ -n "${CLAUDE}" ] || die "claude is not installed: run install-claude-code.sh"
+[ -x "${LMS}" ] || die "${LMS} is missing: LM Studio has not been set up on this Mac"
+curl -fsS -m 5 -o /dev/null "${URL}/v1/models" \
+    || die "LM Studio does not answer at ${URL}: open LM Studio, or run ${LMS} server start"
+
+# Context length the model is loaded with now, empty when it is not loaded.
+loaded_context() {
+    local json i id
+    json="$("${LMS}" ps --json 2>/dev/null)" || return 0
+    i=0
+    while id="$(printf '%s' "${json}" | plutil -extract "${i}.identifier" raw -o - - 2>/dev/null)"; do
+        if [ "${id}" = "${MODEL}" ]; then
+            printf '%s' "${json}" | plutil -extract "${i}.contextLength" raw -o - - 2>/dev/null || true
+            return 0
+        fi
+        i=$((i + 1))
+    done
+}
+
+# Loaded with no TTL, so it stays while Claude Code idles: an idle unload would bring it back by JIT, at the
+# default context. Open WebUI and the wiki use the same id and are served by this one instance.
+load_model() {
+    echo "claude-lms: loading ${MODEL} with context ${CTX} ..." >&2
+    "${LMS}" load "${MODEL}" --context-length "${CTX}" --identifier "${MODEL}" -y >/dev/null \
+        || die "lms load ${MODEL} failed (does ${URL}/v1/models list it?)"
+}
+
+have="$(loaded_context)"
+if [ -z "${have}" ]; then
+    load_model
+    have="$(loaded_context)"
+elif [ "${have}" -lt "${CTX}" ]; then
+    # Loaded smaller, by a JIT request from Open WebUI or the wiki: reloading cuts off whatever it is answering.
+    echo "claude-lms: ${MODEL} is loaded with context ${have}, under the ${CTX} Claude Code needs." >&2
+    if [ -t 0 ] && [ -t 2 ]; then
+        printf 'Reload it now? A chat or wiki ingest it is answering is cut off. [y/N] ' >&2
+        read -r ans
+        case "${ans}" in y|Y|yes) ;; *) die "not reloaded" ;; esac
+        "${LMS}" unload "${MODEL}" >/dev/null || die "lms unload ${MODEL} failed"
+        load_model
+        have="$(loaded_context)"
+    else
+        die "reload it: ${LMS} unload ${MODEL} && ${LMS} load ${MODEL} --context-length ${CTX} --identifier ${MODEL} -y"
+    fi
+fi
+[ -n "${have}" ] || die "${MODEL} did not stay loaded"
+
+# Every model name Claude Code asks for (main, background haiku calls, subagents) goes to the one local model.
+export ANTHROPIC_BASE_URL="${URL}"
+export ANTHROPIC_AUTH_TOKEN="${CLAUDE_LMS_TOKEN:-lmstudio}"
+export ANTHROPIC_MODEL="${MODEL}"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="${MODEL}" ANTHROPIC_DEFAULT_SONNET_MODEL="${MODEL}"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="${MODEL}" ANTHROPIC_SMALL_FAST_MODEL="${MODEL}"
+export CLAUDE_CODE_SUBAGENT_MODEL="${MODEL}"
+# The attribution header changes per request and would void LM Studio's prompt cache.
+export CLAUDE_CODE_ATTRIBUTION_HEADER=0
+# No updater, telemetry, error reports or other calls to Anthropic: this Mac may have no internet at all.
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_AUTOUPDATER=1
+# Claude Code assumes a 200k window for a model it does not know. This sets the model's window to what is really
+# loaded, and auto-compact follows it. (CLAUDE_CODE_AUTO_COMPACT_WINDOW cannot: it has a 100k floor.)
+export CLAUDE_CODE_MAX_CONTEXT_TOKENS="${have}"
+exec "${CLAUDE}" "$@"
