@@ -1,6 +1,6 @@
 # LLM + Wiki 통합 번들 (guardian 기반)
 
-인터넷 없이 Mac 한 대에 **LM Studio + Open WebUI + 사내 위키(wiki-mcp)** 를 설치하는 번들이다.
+인터넷 없이 Mac 한 대에 **LM Studio + Open WebUI + 사내 위키(wiki-mcp) + Claude Code** 를 설치하는 번들이다.
 
 | 구성 | 내용 |
 |---|---|
@@ -8,6 +8,7 @@
 | 임베딩 | `text-embedding-bge-m3` (bge-m3 GGUF Q8, 1024차원, `lmstudio-home/models/gpustack/bge-m3-GGUF` 에 동봉) — 위키 검색과 Open WebUI RAG 가 함께 쓴다 |
 | Open WebUI | Python 3.12 venv `~/.guardian-llm`, LaunchAgent `dev.guardian.openwebui` (:8080) |
 | 위키 | wiki-mcp · mcpo(127.0.0.1:8766) · raw 자동변환 watch, 홈 `~/llm-wiki` |
+| Claude Code | Anthropic 서명 네이티브 바이너리(빌드 Mac 의 것을 서명 확인 후 복사) + `claude-lms`(LM Studio 로 연결, Anthropic 계정 불필요). `install-all.sh` 마지막 단계가 `~/.local/bin` 에 설치. 빌드 때 `--no-claude-code` 면 뺀다 |
 
 ## 설치
 
