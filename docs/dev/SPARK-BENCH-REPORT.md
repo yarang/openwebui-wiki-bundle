@@ -2,8 +2,6 @@
 
 상태: **실측 완료** · 1차 측정 2026-11-12 10:47–11:00 UTC (util 0.35) · **재벤치 11:58–12:48 UTC (util 0.60 · 실제 경로)** · 작성 2026-11-12
 
-> **사본:** Isaac 쪽 저장소 issac_sim에 이 문서의 복사본([docs/internal/SPARK-BENCH-REPORT.md](https://git.example.com/your-org/issac_sim/src/branch/main/docs/SPARK-BENCH-REPORT.md))이 Isaac 관점 요약과 함께 있다(2026-11-18). **이 문서가 정본이다.** 수치나 권고를 고치면 사본에도 반영한다.
-
 DGX Spark를 강의 시스템으로 쓸 때 **한 대가 학생 몇 명까지 버티는지**를 알기 위해,
 지금 운영 중인 vLLM 서비스에 부하를 걸어 측정했다.
 
