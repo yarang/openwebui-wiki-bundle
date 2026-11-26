@@ -1,0 +1,25 @@
+# Cluster-scoped PersistentVolume for the HuggingFace cache (single node).
+# Applied by install-spark-k8s.sh; the controller's ServiceAccount cannot
+# create or modify PVs. hostPath is only tolerated here because the pod spec
+# itself references a PVC (baseline PSA) — the pod template stays hostPath-
+# free. reclaimPolicy Retain: an accidental PVC delete must not wipe the
+# models. The hostPath path is rewritten by the installer in its staged copy
+# (overlays/spark/hf-cache-pv-patch.yaml) to the real user's cache dir.
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: hf-cache
+spec:
+  capacity:
+    storage: 500Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: spark-llm
+    name: hf-cache
+  hostPath:
+    path: /home/YOUR_USER/.cache/huggingface
+    type: Directory

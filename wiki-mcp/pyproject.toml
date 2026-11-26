@@ -1,6 +1,6 @@
 [project]
 name = "wiki-mcp"
-version = "0.2.4"
+version = "0.2.6"
 description = "MCP server exposing a Korean atomic-note wiki — search, read, and natural-language CRUD with BM25+dense hybrid retrieval."
 readme = "README.md"
 requires-python = ">=3.10"

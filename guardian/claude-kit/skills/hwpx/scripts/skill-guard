@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# skill-guard 래퍼(PreToolUse hook): stdin 의 hook JSON 을 같은 폴더의 skill_guard.py 에 넘긴다.
+# Skill 도구는 SKILL.md 안내만 대화에 싣고 명령을 실행하지 않아 작은 모델이 같은 호출을 되풀이하므로,
+# 파이썬이 세션마다 같은 skill 의 두 번째 호출부터 거부한다. 이 스크립트는 언제나 종료 0(fail-open):
+# 파이썬이 없거나 터져도 대화를 막지 않는다. stderr 도 버린다.
+set -u
+PY="${CLAUDE_LMS_PY:-${HOME:-}/.guardian-llm/venv/bin/python}"
+if [ ! -f "$PY" ] || [ ! -x "$PY" ]; then
+  exit 0
+fi
+# 심볼릭 링크로 불려도 실제 파일 위치를 찾는다(hwpx 래퍼와 같은 방식): readlink 를 최대 40번 따라가고,
+# 상대 대상은 현재 링크의 폴더 기준으로 이어 붙인다. 순환 링크는 40번에서 멈춘다.
+SELF="$0"
+COUNT=0
+while [ -L "$SELF" ] && [ "$COUNT" -lt 40 ]; do
+  LINK="$(readlink "$SELF")"
+  case "$LINK" in
+    /*) SELF="$LINK" ;;
+    *) SELF="$(dirname -- "$SELF")/$LINK" ;;
+  esac
+  COUNT=$((COUNT + 1))
+done
+DIR="$(CDPATH= cd -- "$(dirname -- "$SELF")" >/dev/null 2>&1 && pwd)" || DIR=""
+if [ -z "$DIR" ] || [ ! -f "$DIR/skill_guard.py" ]; then
+  exit 0
+fi
+# 시간 제한은 perl 이 있을 때만 건다(alarm 은 exec 뒤에도 유지되어 끝나지 않는 파이썬을 5초에 끊는다).
+if [ -x /usr/bin/perl ]; then
+  /usr/bin/perl -e 'alarm 5; exec @ARGV' "$PY" -I "$DIR/skill_guard.py" 2>/dev/null
+else
+  "$PY" -I "$DIR/skill_guard.py" 2>/dev/null
+fi
+exit 0

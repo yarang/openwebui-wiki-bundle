@@ -1,0 +1,78 @@
+# The controller. Reuses the vLLM image (python3 entrypoint) so no extra
+# image has to be imported; the code arrives as a read-only ConfigMap mount.
+# strategy Recreate: two controllers would race on the same Deployment.
+# automountServiceAccountToken: true — this is the RBAC identity the Kube
+# backend uses. No GPU request.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-switch
+  namespace: spark-llm
+  labels:
+    app: spark-switch
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: spark-switch
+  template:
+    metadata:
+      labels:
+        app: spark-switch
+    spec:
+      serviceAccountName: spark-switch
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      containers:
+        - name: spark-switch
+          image: nvcr.io/nvidia/vllm:26.02-py3
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/app/spark_switch.py"]
+          envFrom:
+            - configMapRef:
+                name: spark-switch-config
+          env:
+            - name: SWITCH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: spark-switch-token
+                  key: SWITCH_TOKEN
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vllm-api-key
+                  key: VLLM_API_KEY
+          ports:
+            - containerPort: 8010
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: app
+          configMap:
+            name: spark-switch-app

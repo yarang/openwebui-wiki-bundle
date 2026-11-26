@@ -1,0 +1,22 @@
+flowchart LR
+    subgraph launch["Claude Code를 띄우는 방법"]
+        T["터미널<br/>claude-lms"]
+        V["VS Code 확장<br/>claudeCode.environmentVariables"]
+        S["claude 그대로 실행<br/>.claude/settings.json env 만"]
+    end
+
+    P["프로세스 환경 변수<br/>ANTHROPIC_BASE_URL<br/>ANTHROPIC_AUTH_TOKEN"]
+    L["저장된 claude.ai 로그인<br/>(keychain)"]
+
+    T --> P
+    V --> P
+    S --> L
+
+    P --> OK["LM Studio :1234<br/>내장 도구 12~13개<br/>커넥터 0개"]
+    L --> C["claude.ai 커넥터 내려받음<br/>Notion·Gmail·M365 등 234개"]
+    C --> X["도구 258개가 프롬프트에 실림<br/>LM Studio 500: context 초과<br/>Mac 밖으로 트래픽"]
+
+    classDef good fill:#e6f4ea,stroke:#2e7d32
+    classDef bad fill:#fdecea,stroke:#c62828
+    class OK good
+    class C,X bad

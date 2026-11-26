@@ -1,0 +1,30 @@
+%% skill-guard 의 오피스 파일 거부, 끝나지 않은 heredoc 거부, Stop 가드 (CLAUDE-LMS-MANUAL.md §3.4 참고)
+flowchart TD
+    subgraph P["PreToolUse (matcher: Skill|Write|Edit|MultiEdit|Bash)"]
+        W["Write / Edit / MultiEdit<br/>file_path"] --> WO{"확장자가 docx xlsx pptx hwpx<br/>(옛 doc xls ppt hwp)?"}
+        WO -->|예| DO["deny [skill-guard]<br/>이름이 안전하면 그 이름 그대로<br/>scripts/T from-md ./회의록.md ./회의록.T<br/>아니면 ./이름 자리 + 사용자가 말한 이름을 쓰라는 안내"]
+        WO -->|아니오| OK1["허용"]
+        DO --> MK["scripts/T 가 있으면<br/>&lt;세션&gt;.pending = 이름·횟수(유지)·stem"]
+        B["Bash command"] --> L["따옴표·주석·heredoc 본문을 아는<br/>선형 lexer 로 낱말·연산자 분리"]
+        L --> BO{"> >> >| &> 대상, tee 의 모든 대상,<br/>md→오피스 mv/cp 대상이 오피스 파일?"}
+        BO -->|예| DO
+        BO -->|아니오| HD{"끝나지 않은 heredoc?<br/>(끝 표시가 혼자 한 줄에 없음)"}
+        HD -->|예| DH["deny [skill-guard]<br/>끝 표시는 혼자 한 줄,<br/>변환 명령은 다음 줄에<br/>(표시 유지)"]
+        HD -->|아니오| RUN{"표시된 skill N 의 명령이<br/>명령 자리에서 --help 말고<br/>인자와 함께 실행되나?"}
+        RUN -->|예| CLR["표시 &lt;세션&gt;.pending 지움 → 허용"]
+        RUN -->|아니오| OK2["허용(표시 유지)"]
+        S["Skill N (첫 호출 허용)"] --> SET["scripts/N 이 있으면<br/>&lt;세션&gt;.pending 에 N 기록"]
+    end
+    subgraph T["Stop (matcher 없음, stop_hook_active 와 상관없이 같은 규칙)"]
+        ST["모델이 멈추려 함"] --> PM{"표시 N 이 있나?"}
+        PM -->|아니오| OK4["허용"]
+        PM -->|예| CN{"차단 횟수 ≥ 2<br/>(또는 횟수가 깨짐)?"}
+        CN -->|예| OK3["표시 지우고 허용<br/>(무한 루프 방지)"]
+        CN -->|아니오| INC{"횟수+1 기록 성공?"}
+        INC -->|아니오| OK5["허용"]
+        INC -->|예, 첫 번째| BL1["block: 아직 파일이 없다, 원래 요청대로<br/>이번 답에서 Bash 도구로 from-md 실행,<br/>지어내지 말 것 (Skill 을 불렀으면 다시 부르지 말 것)"]
+        INC -->|예, 두 번째| BL2["block: 더 짧은 다른 문구<br/>[skill-guard] Bash 도구 + from-md 명령"]
+    end
+    SET -. 명령을 안 돌리고 멈추면 .-> PM
+    MK -. 변환 없이 멈추면 .-> PM
+    DH -. 표시 유지 .-> PM

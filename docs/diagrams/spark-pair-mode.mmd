@@ -1,0 +1,26 @@
+flowchart LR
+  subgraph MAC["prod-mac"]
+    C["Claude Code · claude-lms · VS Code"]
+    R["llm-router :1240<br/>SPARK_URLS = :8000, :8001<br/>모델 id를 내놓는 주소로 보냄"]
+    L["LM Studio :1234<br/>local-fast (gemma)"]
+    CLI["spark-model<br/>use &lt;이름&gt; · default"]
+    C --> R
+    CLI --> R
+    R -->|"local · 폴백"| L
+  end
+
+  subgraph SPARK["DGX Spark (GB10 · 통합 메모리 121GiB)"]
+    SW["spark-switch :8010<br/>DEFAULT_PROFILE=pair<br/>메모리 대기 · 순차 기동"]
+    subgraph PAIR["상주 페어 (기본)"]
+      V0["slot0 vllm-coder :8000<br/>qwen3-instruct · util 0.40"]
+      V1["slot1 vllm-coder-1 :8001<br/>qwen3-coder · util 0.40"]
+    end
+    BIG["대형 모델 (요청할 때만)<br/>slot0 :8000 단독<br/>gpt-oss-120b · qwen3-next-80b · qwen3-vl-30b"]
+    SW -->|"default · 유휴 30분 · 복구"| PAIR
+    SW -.->|"spark-model use &lt;대형&gt;<br/>두 슬롯을 내리고 단독 실행"| BIG
+  end
+
+  R -->|"spark-large · qwen3-instruct"| V0
+  R -->|"qwen3-coder"| V1
+  R -.->|"대형 모델 id"| BIG
+  R -->|"/v1/spark/status · switch"| SW

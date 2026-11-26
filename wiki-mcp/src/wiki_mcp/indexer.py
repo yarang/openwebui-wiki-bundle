@@ -156,6 +156,50 @@ class WikiIndexer:
         with self._lock:
             return self._build(force, verbose)
 
+    def _note_from_post(
+        self, md: Path, post: frontmatter.Post, note_id: str, id_source: str
+    ) -> dict:
+        """frontmatter post → 인덱싱용 note dict.
+
+        id_source: "frontmatter" (frontmatter id) 또는 "filename" (파일 이름 stem
+        fallback — Foam 가 끊어진 [[링크]] 로 만든 노트처럼 frontmatter id 없는 파일).
+        """
+        content = post.content
+        tags = post.get("tags", []) or []
+        if isinstance(tags, str):
+            tags = [tags]
+        return {
+            "id": note_id,
+            "id_source": id_source,
+            "title": post.get("title", "") or "",
+            "tags": tags,
+            "source_url": post.get("source_url", "") or "",
+            "path": str(md.relative_to(self.wiki_path)),
+            "content": content,
+            "content_hash": self._content_hash(content),
+            "out_links": extract_links(content),
+        }
+
+    def _register_note(
+        self,
+        note: dict,
+        cache: dict[str, str],
+        stored: set[str],
+        new_cache: dict[str, str],
+        embed_queue: list[dict],
+    ) -> None:
+        """note dict 를 인메모리 인덱스(notes/all_ids/in·out links)에 등록 + 임베딩 큐."""
+        note_id = note["id"]
+        self.notes[note_id] = note
+        self.all_ids.add(note_id)
+        for target in note["out_links"]:
+            self.out_links.setdefault(note_id, set()).add(target)
+            self.in_links.setdefault(target, set()).add(note_id)
+        if cache.get(note_id) != note["content_hash"] or note_id not in stored:
+            embed_queue.append(note)
+        else:
+            new_cache[note_id] = note["content_hash"]
+
     def _build(self, force: bool, verbose: bool) -> dict:
         cache_file = self.data_dir / "index_cache.json"
         cache: dict[str, str] = {}
@@ -179,6 +223,11 @@ class WikiIndexer:
         self.out_links.clear()
         self.in_links.clear()
 
+        # frontmatter id 없는 노트 후보 — 루프가 끝난 뒤(모든 frontmatter id 노트가
+        # 인덱싱된 후) 파일 이름 stem 으로 id 를 정한다. Foam 가 [[some-id]] 클릭으로
+        # 만든 some-id.md (frontmatter id 없음) 가 이 전까지는 검색·그래프에 안 보였다.
+        fallback: list[tuple[Path, frontmatter.Post]] = []
+
         for md in self.wiki_path.rglob("*.md"):
             # 숨김 디렉토리(.templates, .git 등) 내 파일은 노트로 취급하지 않음
             if any(part.startswith(".") for part in md.relative_to(self.wiki_path).parts):
@@ -186,41 +235,40 @@ class WikiIndexer:
             try:
                 post = frontmatter.load(md)
                 note_id = post.get("id")
-                if not note_id:
-                    continue
-
-                content = post.content
-                chash = self._content_hash(content)
-                title = post.get("title", "") or ""
-                tags = post.get("tags", []) or []
-                if isinstance(tags, str):
-                    tags = [tags]
-                source_url = post.get("source_url", "") or ""
-
-                links = extract_links(content)
-
-                note = {
-                    "id": note_id,
-                    "title": title,
-                    "tags": tags,
-                    "source_url": source_url,
-                    "path": str(md.relative_to(self.wiki_path)),
-                    "content": content,
-                    "content_hash": chash,
-                    "out_links": links,
-                }
-                self.notes[note_id] = note
-                self.all_ids.add(note_id)
-
-                for target in links:
-                    self.out_links.setdefault(note_id, set()).add(target)
-                    self.in_links.setdefault(target, set()).add(note_id)
-
-                if cache.get(note_id) != chash or note_id not in stored:
-                    embed_queue.append(note)
+                if note_id:
+                    note = self._note_from_post(md, post, note_id, "frontmatter")
+                    self._register_note(note, cache, stored, new_cache, embed_queue)
                 else:
-                    new_cache[note_id] = chash
+                    fallback.append((md, post))
 
+            except Exception as e:
+                if verbose:
+                    print(f"⚠️  {md}: {e}", file=sys.stderr)
+
+        # fallback 후보 처리 — sorted 경로 순서로 순회해 rglob 순서와 무관하게
+        # 결과가 결정적이게 한다. stem 이 이미 인덱싱된 id (frontmatter 또는 먼저 처리된
+        # fallback) 와 겹치면 그 파일은 건너뛴다.
+        for md, post in sorted(
+            fallback, key=lambda item: str(item[0].relative_to(self.wiki_path))
+        ):
+            stem = md.stem
+            rel = str(md.relative_to(self.wiki_path))
+            if stem in self.all_ids:
+                if verbose:
+                    print(
+                        f"⚠️  {rel}: frontmatter id 없음, 파일 이름 '{stem}' 이 "
+                        f"이미 다른 노트 id — 건너뜀",
+                        file=sys.stderr,
+                    )
+                continue
+            if verbose:
+                print(
+                    f"ℹ️  {rel}: frontmatter id 없음 — 파일 이름 '{stem}' 을 id 로 사용",
+                    file=sys.stderr,
+                )
+            try:
+                note = self._note_from_post(md, post, stem, "filename")
+                self._register_note(note, cache, stored, new_cache, embed_queue)
             except Exception as e:
                 if verbose:
                     print(f"⚠️  {md}: {e}", file=sys.stderr)

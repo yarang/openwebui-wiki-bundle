@@ -14,7 +14,8 @@
 #   2. optional --migrate-from: copies (never moves) an old standalone bundle's Open WebUI data, secret key, wiki,
 #      wiki-data and raw; points the DB's wiki tool server at the new key and the DB's RAG embedding at LM Studio
 #   3. <wiki-home>: program files refreshed, data folders (wiki, wiki-data, raw) created only when absent, .env
-#      written once (mode 600, random mcpo key); a kept .env still holding an old bundle default model is updated
+#      written once (mode 600, random mcpo key); a kept .env whose WIKI_INGEST_MODEL is one id of the gemma alias
+#      pair (google/gemma-4-e4b, gemma-4-e4b-it-mlx) is swapped to the other when only the other is listed
 #   4. LaunchAgents dev.guardian.wiki-mcpo (127.0.0.1:<mcpo-port>) and dev.guardian.wiki-watch; the Open WebUI
 #      LaunchAgent gets TOOL_SERVER_CONNECTIONS and RAG_EMBEDDING_MODEL so a fresh DB registers the wiki tool server
 #      and embeds attachments with the wiki's model
@@ -46,7 +47,8 @@ MCPO_PORT=8766
 WEBUI_HOST=""
 MIGRATE_FROM=""
 EMBEDDING_MODEL="text-embedding-bge-m3"
-LMSTUDIO_URL="http://127.0.0.1:1234/v1"
+# LM Studio's server. WIKI_LMSTUDIO_URL overrides it (tests point it at a stub server); the default is unchanged.
+LMSTUDIO_URL="${WIKI_LMSTUDIO_URL:-http://127.0.0.1:1234/v1}"
 WEBUI_LABEL="dev.guardian.openwebui"
 MCPO_LABEL="dev.guardian.wiki-mcpo"
 WATCH_LABEL="dev.guardian.wiki-watch"
@@ -358,23 +360,73 @@ write_env() {
     note ".env written (mode 600)"
 }
 
-# Bundles up to 20261025T153406Z wrote these defaults. google/gemma-4-e4b is not the id LM Studio gives the bundled
-# gemma (raw ingestion failed with "No models loaded"), and nomic finds little in Korean notes. A value someone set
+# The gemma alias pair: LM Studio names a model after where its files sit, so the bundle's gemma is listed as
+# google/gemma-4-e4b on a Mac that got it through the LM Studio hub catalog (files under the hub's google/ folder)
+# and as gemma-4-e4b-it-mlx on a fresh Mac the bundle installed it on. The two ids are the same model, so a kept
+# .env can name the id this Mac's LM Studio does not list. This case statement is the one place that knows the
+# pair, and only a value inside it is ever swapped — anything else was set by hand and is left alone.
+model_alias() {
+    case "${1}" in
+        google/gemma-4-e4b) MODEL_ALIAS="gemma-4-e4b-it-mlx" ;;
+        gemma-4-e4b-it-mlx) MODEL_ALIAS="google/gemma-4-e4b" ;;
+        *) MODEL_ALIAS="" ;;
+    esac
+}
+
+# Model ids LM Studio lists, one per line; empty when its server does not answer (plutil reads the JSON: a clean
+# Mac has no python3).
+lmstudio_ids() {
+    local json i=0 id
+    json="$(curl -fsS -m 5 "${LMSTUDIO_URL}/models" 2>/dev/null)" || return 0
+    while id="$(printf '%s' "${json}" | plutil -extract "data.${i}.id" raw -o - - 2>/dev/null)"; do
+        printf '%s\n' "${id}"
+        i=$((i + 1))
+    done
+}
+
+# Bundles up to 20261025T153406Z wrote these defaults, and nomic finds little in Korean notes. A value someone set
 # by hand is left alone. wiki-mcp rebuilds its vector store by itself when the embedding model changes.
 upgrade_env() {
-    local env="$1" spec key old new cur
-    for spec in "WIKI_INGEST_MODEL google/gemma-4-e4b gemma-4-e4b-it-mlx" \
-        "EMBEDDING_MODEL text-embedding-nomic-embed-text-v1.5 ${EMBEDDING_MODEL}"; do
-        read -r key old new <<<"${spec}"
-        cur="$(sed -n "s/^${key}=//p" "${env}" | head -1)"
-        [ "${cur}" = "${old}" ] && [ "${old}" != "${new}" ] || continue
+    local env="$1" key old new cur ids
+    # EMBEDDING_MODEL keeps its unconditional rule: the nomic default of the early bundles is replaced by this
+    # bundle's embedding model, whatever the current LM Studio lists.
+    key="EMBEDDING_MODEL"
+    old="text-embedding-nomic-embed-text-v1.5"
+    new="${EMBEDDING_MODEL}"
+    cur="$(sed -n "s/^${key}=//p" "${env}" | head -1)"
+    if [ "${cur}" = "${old}" ] && [ "${old}" != "${new}" ]; then
         if [ "${DRY}" = 1 ]; then
             note "[dry-run] .env ${key}: ${old} -> ${new}"
-            continue
+        else
+            sed "s#^${key}=${old}\$#${key}=${new}#" "${env}" >"${env}.tmp" && cat "${env}.tmp" >"${env}" && rm -f "${env}.tmp"
+            note ".env ${key}: ${old} -> ${new}"
         fi
-        sed "s#^${key}=${old}\$#${key}=${new}#" "${env}" >"${env}.tmp" && cat "${env}.tmp" >"${env}" && rm -f "${env}.tmp"
-        note ".env ${key}: ${old} -> ${new}"
-    done
+    fi
+    # WIKI_INGEST_MODEL: one gemma, two ids LM Studio can list (model_alias above). Swapped only when LM Studio
+    # answers, does not list the id the .env names but lists its alias. An unanswered server is left as it is —
+    # install-llm-wiki.sh runs this step again after LM Studio's first launch, which fixes it then.
+    key="WIKI_INGEST_MODEL"
+    cur="$(sed -n "s/^${key}=//p" "${env}" | head -1)"
+    model_alias "${cur}"
+    [ -n "${MODEL_ALIAS}" ] || return 0
+    ids="$(lmstudio_ids)"
+    if [ -z "${ids}" ]; then
+        note "LM Studio is not answering: ${key} left as ${cur}"
+        return 0
+    fi
+    case $'\n'"${ids}"$'\n' in
+        *$'\n'"${cur}"$'\n'*) return 0 ;;    # this Mac's LM Studio lists it: nothing to swap
+    esac
+    case $'\n'"${ids}"$'\n' in
+        *$'\n'"${MODEL_ALIAS}"$'\n'*) ;;
+        *) return 0 ;;                        # neither id listed: leave the value alone
+    esac
+    if [ "${DRY}" = 1 ]; then
+        note "[dry-run] .env ${key}: ${cur} -> ${MODEL_ALIAS}"
+        return 0
+    fi
+    sed "s#^${key}=${cur}\$#${key}=${MODEL_ALIAS}#" "${env}" >"${env}.tmp" && cat "${env}.tmp" >"${env}" && rm -f "${env}.tmp"
+    note ".env ${key}: ${cur} -> ${MODEL_ALIAS}"
 }
 
 # Only tuning values (ingest limits, timeout, templates, OCR switch) are carried over from the old file. Paths, the
@@ -460,16 +512,36 @@ patch_webui_agent() {
 }
 
 # ---- 5. start and check ------------------------------------------------------------------
+# mcpo serves openapi.json without auth, so a 200 there says nothing about the key. The key is checked with an empty
+# POST to a tool that has required arguments: mcpo checks auth before the body, so 422 means the key was accepted and
+# the tool never ran. A tool without required arguments would run on {}, so those are never picked.
 check_mcpo() {
-    local i
+    local i base="http://127.0.0.1:${MCPO_PORT}" up="" tool code
     for i in $(seq 1 60); do
-        if curl -sf -o /dev/null -H "Authorization: Bearer ${MCPO_KEY}" "http://127.0.0.1:${MCPO_PORT}/openapi.json"; then
-            note "mcpo answers on 127.0.0.1:${MCPO_PORT} (${i}s)"
-            return 0
-        fi
+        curl -sf -o /dev/null "${base}/openapi.json" && { up="${i}"; break; }
         sleep 1
     done
-    die "mcpo did not answer within 60s; see ${WIKI_HOME}/logs/mcpo.log"
+    [ -n "${up}" ] || die "mcpo did not answer within 60s; see ${WIKI_HOME}/logs/mcpo.log"
+    tool="$(curl -sf "${base}/openapi.json" | "${PY}" -I -c '
+import json, sys
+d = json.load(sys.stdin)
+schemas = d.get("components", {}).get("schemas", {})
+for path, ops in sorted(d.get("paths", {}).items()):
+    s = ops.get("post", {}).get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
+    s = schemas.get(s.get("$ref", "").rsplit("/", 1)[-1], s)
+    if s.get("required"):
+        print(path)
+        break
+')" || die "mcpo openapi.json is unreadable"
+    [ -n "${tool}" ] || die "mcpo lists no tool with required arguments; cannot check the key"
+    # Header from stdin keeps the key out of the process list. A transport failure leaves 000 and falls to the last case.
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H @- -d '{}' \
+        "${base}${tool}" <<< "Authorization: Bearer ${MCPO_KEY}")" || true
+    case "${code}" in
+        422)     note "mcpo answers on 127.0.0.1:${MCPO_PORT} (${up}s) and accepts the key" ;;
+        401|403) die "mcpo rejects WIKI_MCPO_KEY (HTTP ${code}); compare ${WIKI_HOME}/.env with the running mcpo" ;;
+        *)       die "mcpo key check on ${tool} returned HTTP ${code}; see ${WIKI_HOME}/logs/mcpo.log" ;;
+    esac
 }
 
 # A model id LM Studio does not know fails only at use: embeddings drop the wiki to BM25, ingestion stops. LM Studio
@@ -497,7 +569,8 @@ install_packages
 install_embedding
 configure_lmstudio
 if [ -f "${WIKI_HOME}/.env" ]; then
-    MCPO_KEY="$(sed -n 's/^WIKI_MCPO_KEY=//p' "${WIKI_HOME}/.env" | head -1)"
+    # Parsed the way run-wiki-mcp.sh does (quotes, inline comments, CRLF), so Open WebUI gets the key mcpo runs with.
+    MCPO_KEY="$(unset WIKI_MCPO_KEY; . "${LAYER}/load-env.sh"; load_env "${WIKI_HOME}/.env"; printf '%s' "${WIKI_MCPO_KEY:-}")"
     [ -n "${MCPO_KEY}" ] || die "${WIKI_HOME}/.env has no WIKI_MCPO_KEY"
 else
     MCPO_KEY="$(openssl rand -hex 24)"

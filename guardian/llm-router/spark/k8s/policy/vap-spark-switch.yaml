@@ -1,0 +1,250 @@
+# Third (optional) security layer: ValidatingAdmissionPolicy.
+#
+# NOT referenced by any kustomization. Applied only in stage B, after
+# checking that the installed k3s version has ValidatingAdmissionPolicy GA
+# (design §6, §9): kubectl apply -f k8s/policy/vap-spark-switch.yaml
+#
+# RBAC alone does not bound the controller: a Deployment patch spans the
+# whole pod template. PSA (layer two) already rejects the worst of that at
+# pod creation; this policy pins the template instead: the spark-switch
+# ServiceAccount may change ONLY
+#   - the serving container's args (the `vllm serve` command line), and
+#   - the template annotations spark-switch/profile and
+#     spark-switch/requested-at.
+# EVERYTHING else must arrive unchanged:
+#   - EVERY core/v1 Container field except args (name is only the join
+#     key): image, command, env, envFrom, volumeMounts, volumeDevices,
+#     resources, resizePolicy, restartPolicy, securityContext, ports,
+#     livenessProbe, readinessProbe, startupProbe, lifecycle (a postStart
+#     hook would run arbitrary code inside the container), workingDir,
+#     imagePullPolicy, terminationMessagePath, terminationMessagePolicy,
+#     stdin, stdinOnce, tty. The container set is compared SYMMETRICALLY:
+#     no container may be added, removed or renamed either.
+#   - EVERY core/v1 PodSpec field except containers (pinned above):
+#     initContainers, ephemeralContainers, volumes, hostAliases, dnsConfig,
+#     dnsPolicy, shareProcessNamespace, hostUsers, hostname, subdomain,
+#     setHostnameAsFQDN, restartPolicy, terminationGracePeriodSeconds,
+#     activeDeadlineSeconds, schedulerName, imagePullSecrets,
+#     readinessGates, overhead, os, preemptionPolicy, priority,
+#     topologySpreadConstraints, schedulingGates, resourceClaims,
+#     serviceAccountName, runtimeClassName, nodeName, nodeSelector,
+#     tolerations, affinity, pod securityContext, hostNetwork, hostPID,
+#     hostIPC, automountServiceAccountToken, enableServiceLinks,
+#     priorityClassName.
+#   - spec.replicas, spec.strategy, spec.selector and the template labels.
+# Optional fields are compared with CEL optional access
+# (`object.spec.template.spec.?field == oldObject.spec.template.spec.?field`)
+# so "absent on both sides" passes and "absent vs present" fails — a plain
+# `has()` pair cannot express that without a case explosion.
+# Annotations rule (both directions, no short-circuit): every key of the
+# NEW annotations must be one of the two spark-switch keys, or already
+# exist in the old annotations with the SAME value — a brand-new key is
+# never accepted just for being new; every key of the OLD annotations must
+# survive unless it is one of the two.
+# `kubectl.kubernetes.io/restartedAt` is deliberately NOT in the allowlist:
+# the controller never sets it, and allowing it would let a compromised
+# token restart-roll the GPU workload at will. If stage B ever starts
+# setting it, add it to the allowlist expression and here.
+#
+# Stage-B behavioural check (needs a live apiserver, after --with-policy):
+#   ALLOWED (must succeed — this is exactly what spark-switch sends):
+#     kubectl --as=system:serviceaccount:spark-llm:spark-switch -n spark-llm \
+#       patch deploy vllm-coder --type=strategic -p \
+#       '{"spec":{"template":{"metadata":{"annotations":{ \
+#         "spark-switch/profile":"gpt-oss-120b", \
+#         "spark-switch/requested-at":"1763000000000-ab12cd"}}, \
+#         "spec":{"containers":[{"name":"vllm","args":[ \
+#         "openai/gpt-oss-120b","--served-model-name","gpt-oss-120b", \
+#         "--host","0.0.0.0","--port","8000","--gpu-memory-utilization","0.80", \
+#         "--max-model-len","131072","--enable-auto-tool-choice", \
+#         "--tool-call-parser","openai","--reasoning-parser","openai_gptoss"]}]}}}}' \
+#       --dry-run=server
+#   FORBIDDEN (each must be DENIED):
+#     - the same patch with the container "image" changed
+#     - the same patch with an added "env" or "envFrom" entry
+#     - the same patch with an added lifecycle postStart/exec hook
+#     - the same patch with an added volume / volumeMount / volumeDevice
+#     - the same patch with a container REMOVED (or an extra one added)
+#     - the same patch with spec.strategy or spec.selector changed
+#     - the same patch with an added hostAliases or dnsConfig entry
+#     - the same patch with kubectl.kubernetes.io/restartedAt added
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: spark-switch-limits
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["UPDATE"]
+        resources: ["deployments"]
+  matchConditions:
+    - name: only-spark-switch-sa
+      expression: >-
+        request.userInfo.username ==
+        'system:serviceaccount:spark-llm:spark-switch'
+  validations:
+    # containers: same count; every new container matches an old one by
+    # name with EVERY field equal except args (the only thing the
+    # controller may rewrite), and — symmetrically — every old container
+    # still exists by name in the new object. Adding, removing, renaming
+    # or duplicating containers, or swapping anything but args (image,
+    # lifecycle hooks, env, probes, ...), is impossible.
+    - expression: >-
+        object.spec.template.spec.containers.size() ==
+        oldObject.spec.template.spec.containers.size()
+        && object.spec.template.spec.containers.all(c,
+        oldObject.spec.template.spec.containers.exists(o,
+        o.name == c.name
+        && o.image == c.image
+        && o.?command == c.?command
+        && o.?env == c.?env
+        && o.?envFrom == c.?envFrom
+        && o.?volumeMounts == c.?volumeMounts
+        && o.?volumeDevices == c.?volumeDevices
+        && o.?resources == c.?resources
+        && o.?resizePolicy == c.?resizePolicy
+        && o.?restartPolicy == c.?restartPolicy
+        && o.?securityContext == c.?securityContext
+        && o.?ports == c.?ports
+        && o.?livenessProbe == c.?livenessProbe
+        && o.?readinessProbe == c.?readinessProbe
+        && o.?startupProbe == c.?startupProbe
+        && o.?lifecycle == c.?lifecycle
+        && o.?workingDir == c.?workingDir
+        && o.?imagePullPolicy == c.?imagePullPolicy
+        && o.?terminationMessagePath == c.?terminationMessagePath
+        && o.?terminationMessagePolicy == c.?terminationMessagePolicy
+        && o.?stdin == c.?stdin
+        && o.?stdinOnce == c.?stdinOnce
+        && o.?tty == c.?tty))
+        && oldObject.spec.template.spec.containers.all(o,
+        object.spec.template.spec.containers.exists(c, c.name == o.name))
+      message: only container args may change
+    # pod spec: field-by-field over the whole core/v1 PodSpec surface
+    # except `containers` itself (pinned above) — sidecars and init
+    # containers, volumes, identity, DNS, scheduling, node pinning, host
+    # namespaces and the pod security context must all be unchanged.
+    - expression: >-
+        object.spec.template.spec.?initContainers ==
+        oldObject.spec.template.spec.?initContainers
+        && object.spec.template.spec.?ephemeralContainers ==
+        oldObject.spec.template.spec.?ephemeralContainers
+        && object.spec.template.spec.?volumes ==
+        oldObject.spec.template.spec.?volumes
+        && object.spec.template.spec.?hostAliases ==
+        oldObject.spec.template.spec.?hostAliases
+        && object.spec.template.spec.?dnsConfig ==
+        oldObject.spec.template.spec.?dnsConfig
+        && object.spec.template.spec.?dnsPolicy ==
+        oldObject.spec.template.spec.?dnsPolicy
+        && object.spec.template.spec.?shareProcessNamespace ==
+        oldObject.spec.template.spec.?shareProcessNamespace
+        && object.spec.template.spec.?hostUsers ==
+        oldObject.spec.template.spec.?hostUsers
+        && object.spec.template.spec.?hostname ==
+        oldObject.spec.template.spec.?hostname
+        && object.spec.template.spec.?subdomain ==
+        oldObject.spec.template.spec.?subdomain
+        && object.spec.template.spec.?setHostnameAsFQDN ==
+        oldObject.spec.template.spec.?setHostnameAsFQDN
+        && object.spec.template.spec.?restartPolicy ==
+        oldObject.spec.template.spec.?restartPolicy
+        && object.spec.template.spec.?terminationGracePeriodSeconds ==
+        oldObject.spec.template.spec.?terminationGracePeriodSeconds
+        && object.spec.template.spec.?activeDeadlineSeconds ==
+        oldObject.spec.template.spec.?activeDeadlineSeconds
+        && object.spec.template.spec.?schedulerName ==
+        oldObject.spec.template.spec.?schedulerName
+        && object.spec.template.spec.?imagePullSecrets ==
+        oldObject.spec.template.spec.?imagePullSecrets
+        && object.spec.template.spec.?readinessGates ==
+        oldObject.spec.template.spec.?readinessGates
+        && object.spec.template.spec.?overhead ==
+        oldObject.spec.template.spec.?overhead
+        && object.spec.template.spec.?os ==
+        oldObject.spec.template.spec.?os
+        && object.spec.template.spec.?preemptionPolicy ==
+        oldObject.spec.template.spec.?preemptionPolicy
+        && object.spec.template.spec.?priority ==
+        oldObject.spec.template.spec.?priority
+        && object.spec.template.spec.?topologySpreadConstraints ==
+        oldObject.spec.template.spec.?topologySpreadConstraints
+        && object.spec.template.spec.?schedulingGates ==
+        oldObject.spec.template.spec.?schedulingGates
+        && object.spec.template.spec.?resourceClaims ==
+        oldObject.spec.template.spec.?resourceClaims
+        && object.spec.template.spec.?serviceAccountName ==
+        oldObject.spec.template.spec.?serviceAccountName
+        && object.spec.template.spec.?runtimeClassName ==
+        oldObject.spec.template.spec.?runtimeClassName
+        && object.spec.template.spec.?nodeName ==
+        oldObject.spec.template.spec.?nodeName
+        && object.spec.template.spec.?nodeSelector ==
+        oldObject.spec.template.spec.?nodeSelector
+        && object.spec.template.spec.?tolerations ==
+        oldObject.spec.template.spec.?tolerations
+        && object.spec.template.spec.?affinity ==
+        oldObject.spec.template.spec.?affinity
+        && object.spec.template.spec.?securityContext ==
+        oldObject.spec.template.spec.?securityContext
+        && object.spec.template.spec.?hostNetwork ==
+        oldObject.spec.template.spec.?hostNetwork
+        && object.spec.template.spec.?hostPID ==
+        oldObject.spec.template.spec.?hostPID
+        && object.spec.template.spec.?hostIPC ==
+        oldObject.spec.template.spec.?hostIPC
+        && object.spec.template.spec.?automountServiceAccountToken ==
+        oldObject.spec.template.spec.?automountServiceAccountToken
+        && object.spec.template.spec.?enableServiceLinks ==
+        oldObject.spec.template.spec.?enableServiceLinks
+        && object.spec.template.spec.?priorityClassName ==
+        oldObject.spec.template.spec.?priorityClassName
+      message: pod spec fields other than container args must not change
+    # deployment spec: replica count, rollout strategy and the selector
+    # (which pods the Deployment owns) are off limits.
+    - expression: >-
+        object.spec.?replicas == oldObject.spec.?replicas
+        && object.spec.?strategy == oldObject.spec.?strategy
+        && object.spec.selector == oldObject.spec.selector
+      message: replicas, strategy and selector must not change
+    # template labels define what the Services select — pinned.
+    - expression: >-
+        object.spec.template.metadata.?labels ==
+        oldObject.spec.template.metadata.?labels
+      message: template labels must not change
+    # template annotations, both directions. New side first: a key may be
+    # one of the two spark-switch keys (any value), or already present in
+    # the old annotations with the SAME value. There is deliberately no
+    # `!(k in old)` arm: that would accept ANY newly added key. Old side:
+    # a key may only disappear when it is one of the two.
+    - expression: >-
+        object.spec.template.metadata.?annotations.orValue({}).all(k,
+        (k == 'spark-switch/profile'
+        || k == 'spark-switch/requested-at')
+        || (k in oldObject.spec.template.metadata.?annotations.orValue({})
+        && oldObject.spec.template.metadata.?annotations.orValue({})[k]
+        == object.spec.template.metadata.?annotations.orValue({})[k]))
+        && oldObject.spec.template.metadata.?annotations.orValue({}).all(k,
+        k in object.spec.template.metadata.?annotations.orValue({})
+        || k == 'spark-switch/profile'
+        || k == 'spark-switch/requested-at')
+      message: >-
+        only the spark-switch/profile and spark-switch/requested-at
+        annotations may change
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: spark-switch-limits
+spec:
+  policyName: spark-switch-limits
+  validationActions:
+    - Deny
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: spark-llm

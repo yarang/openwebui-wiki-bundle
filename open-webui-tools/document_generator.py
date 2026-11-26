@@ -1,6 +1,6 @@
 """
 title: 문서 생성기 (docx/pptx/xlsx)
-author: example
+author: llm-wiki
 version: 0.1.7
 description: 대화 내용을 Word 보고서·회의록, PowerPoint 발표자료, Excel 표로 만들어 다운로드 링크를 준다.
 required_open_webui_version: 0.5.0

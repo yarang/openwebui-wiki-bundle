@@ -1,0 +1,20 @@
+%% 양식 채우기 대화 흐름 — 사용자 ↔ gemma(Claude Code) ↔ hwpx 도구 (CLAUDE-LMS-MANUAL.md §5.4)
+sequenceDiagram
+    autonumber
+    actor U as 사용자
+    participant M as gemma (claude-lms)
+    participant H as hwpx 도구
+
+    U->>M: /hwpx 신청서.hwpx 에 홍길동·정보화팀·세종으로 채워줘
+    M->>M: SKILL.md 규칙 읽기
+    M->>H: $H fields 신청서.hwpx
+    H-->>M: OK … / - 성명 (표 0, 행 1) / - 부서 … / - 출장지 …
+    M->>H: 값.json 저장 {"성명":"홍길동", …}
+    M->>H: $H fill 신청서.hwpx 값.json 신청서-작성.hwpx
+    alt 성공
+        H-->>M: OK /…/신청서-작성.hwpx · 3개 칸을 채웠습니다, 검증 통과
+        M-->>U: 저장 경로 안내
+    else 실패
+        H-->>M: ERROR 채우지 못한 키: 직급(라벨 없음)
+        M-->>U: 사유 전달 (원본·출력 파일 변화 없음)
+    end

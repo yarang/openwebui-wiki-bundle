@@ -1,0 +1,12 @@
+%% claude-lms 문서·이미지 skill 실행 흐름 (CLAUDE-LMS-SKILLS.md 참고)
+flowchart LR
+    U["사용자<br/>/hwpx 보고서.md 를 한글로"] --> C["claude-lms<br/>(Claude Code + gemma-4-e4b, 65k)"]
+    C -->|"skill 본문 주입<br/>(1k 토큰 미만)"| S["~/.claude/skills/{name}/SKILL.md"]
+    S -->|"Bash 한 줄 호출"| W["scripts/{name} (bash 래퍼)<br/>파이썬·경로 사전 점검"]
+    W --> P["~/.guardian-llm/venv/bin/python -I"]
+    P --> L1["python-hwpx 6.11.0<br/>(skill 전용 lib/에 vendoring)"]
+    P --> L2["python-docx · openpyxl · python-pptx<br/>Pillow · OpenCV · pandas · pypdf<br/>(open-webui 의존성으로 이미 설치)"]
+    W --> N["macOS 내장 sips<br/>vision-ocr (kit 동봉)"]
+    L1 & L2 & N --> O["새 출력 파일<br/>(원본 덮어쓰기 금지)"]
+    O --> V["검증<br/>hwpx-validate / 재열기"]
+    V -->|"경로 + 요약 한 줄"| C

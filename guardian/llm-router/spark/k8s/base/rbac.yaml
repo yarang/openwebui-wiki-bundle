@@ -1,0 +1,45 @@
+# Least privilege for the spark-switch controller:
+#   - deployments: get+patch on exactly the one Deployment it manages
+#     (Deployment patch still spans the whole pod template; PSA + the
+#     optional ValidatingAdmissionPolicy narrow it further — design §6)
+#   - pods: get/list/watch (list cannot be scoped by resourceNames, so the
+#     backend always filters with the label selector app=vllm-coder)
+#   - pods/log: get (failure diagnostics)
+# No secrets, no create/delete, no exec, no other workloads.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-switch
+  namespace: spark-llm
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-switch
+  namespace: spark-llm
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["vllm-coder"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-switch
+  namespace: spark-llm
+subjects:
+  - kind: ServiceAccount
+    name: spark-switch
+    namespace: spark-llm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: spark-switch

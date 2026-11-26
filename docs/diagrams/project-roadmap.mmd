@@ -1,0 +1,23 @@
+%% 발전 방향 — PROJECT-STATUS.md §6. ◆ 표시는 사용자 결정 또는 장비 변경 승인이 필요한 항목.
+flowchart TB
+    subgraph S["단기: 교육 투입 전"]
+        direction LR
+        S1["✅ 문서 현행화 (11-14)<br/>USAGE · OPERATIONS · README"]
+        S2["codex 리뷰 미결분<br/>5차 · 61123d0"]
+        S3["키트 1528Z 실전 재시험"]
+        S4["오프라인 0접속 검증<br/>대화형 첫 실행 · 64k 압축"]
+    end
+    subgraph M["중기: 품질과 운영"]
+        direction LR
+        M1["CI (Gitea Actions)<br/>server.py · watch.py 테스트"]
+        M2["Spark 권장 설정 적용 ◆<br/>max-model-len · batched-tokens · 유선망"]
+        M3["wiki 유지보수 도구<br/>중복 감지 · 병합 · 비동기 변환"]
+        M4["hwpx 확장<br/>누름틀 실양식 · 글 속 빈칸"]
+    end
+    subgraph L["장기: 구조 확장"]
+        direction LR
+        L1["멀티모델 슬롯 ◆<br/>§12 결정 5건"]
+        L2["K8s 단계 B · C ◆<br/>k3s 설치 · 전환"]
+        L3["이미지 skill<br/>vLLM ≥0.28 트랙 ◆"]
+    end
+    S --> M --> L

@@ -1,0 +1,96 @@
+#!/bin/bash
+# ==============================================================================
+# claude-vscode: the VS Code extension's claudeCode.claudeProcessWrapper — Claude Code with the
+# same claude-lms settings the CLI gets, nothing sent off the Mac
+#
+# The extension runs `<wrapper> <path-to-the-bundled-claude> <claude args...>`; when it found no
+# bundled binary the first argument is one of claude's own args and ~/.local/bin/claude is used
+# instead. Settings come from ~/.config/claude-lms/env, read exactly the way claude-lms reads it
+# (XDG_CONFIG_HOME respected, a missing file is fine, the same names set in the environment win),
+# and the arguments they ask for go BEFORE the extension's own:
+#   CLAUDE_LMS_DISALLOWED_TOOLS     comma-separated tool list → --disallowedTools
+#   CLAUDE_LMS_SYSTEM_PROMPT_FILE   replacement system prompt → --system-prompt-file; a missing or
+#                                  unreadable file only warns (VS Code must keep working — the
+#                                  CLI's claude-lms dies on it instead)
+# Neither is passed to claude's own sub-commands (mcp, config, ...), and a command line that
+# already has --system-prompt, --system-prompt-file or --bare is the user's choice:
+# --system-prompt-file is not added. Env values are never printed or logged; values with a
+# control character are dropped with a warning that names the key only. Setting
+# CLAUDE_VSCODE_WRAPPER_LOG to a file path appends one line per run with the argv (arguments
+# only), for diagnosing what the extension passes; a log that cannot be written is ignored.
+# ==============================================================================
+
+set -euo pipefail
+
+CONF="${XDG_CONFIG_HOME:-${HOME}/.config}/claude-lms/env"
+# The environment wins over the file: keep what was set before sourcing it.
+_t="${CLAUDE_LMS_DISALLOWED_TOOLS:-}"; _p="${CLAUDE_LMS_SYSTEM_PROMPT_FILE:-}"
+# shellcheck disable=SC1090
+if [ -f "${CONF}" ]; then . "${CONF}"; fi
+DENY_TOOLS="${_t:-${CLAUDE_LMS_DISALLOWED_TOOLS:-}}"
+PROMPT_FILE="${_p:-${CLAUDE_LMS_SYSTEM_PROMPT_FILE:-}}"
+
+warn() { echo "claude-vscode: $*" >&2; }
+
+# The binary: the extension's first argument when that is one (an executable file), else the local
+# install. Everything left on the command line is claude's own arguments.
+CLAUDE="${HOME}/.local/bin/claude"
+if [ "$#" -gt 0 ] && [ -f "$1" ] && [ -x "$1" ]; then
+    CLAUDE="$1"
+    shift
+fi
+[ -x "${CLAUDE}" ] || { warn "no claude to run: ${CLAUDE} is missing (install-claude-code.sh installs it)"; exit 1; }
+
+# EXTRA: the settings' arguments, placed before the extension's own — a --disallowedTools the user
+# passes themselves still applies after ours. Sub-commands take no settings, as in claude-lms.
+EXTRA=()
+SUBCMD=0
+case "${1:-}" in
+    mcp|config|update|doctor|install|plugin|migrate-installer|setup-token|auth) SUBCMD=1 ;;
+esac
+if [ "${SUBCMD}" = 0 ]; then
+    case "${DENY_TOOLS}" in
+        *[[:cntrl:]]*)
+            warn "CLAUDE_LMS_DISALLOWED_TOOLS has a control character: not applied" ;;
+        '')
+            ;;
+        *)
+            EXTRA+=(--disallowedTools "${DENY_TOOLS}") ;;
+    esac
+    # The extension's args may already carry the user's own --system-prompt/--system-prompt-file/--bare:
+    # that choice wins over the file's, so ours is not added then.
+    prompt_skip=0
+    for arg in "$@"; do
+        case "${arg}" in
+            --system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*|--bare) prompt_skip=1 ;;
+        esac
+    done
+    if [ "${prompt_skip}" = 0 ] && [ -n "${PROMPT_FILE}" ]; then
+        case "${PROMPT_FILE}" in
+            *[[:cntrl:]]*)
+                warn "CLAUDE_LMS_SYSTEM_PROMPT_FILE has a control character: not applied" ;;
+            *)
+                if [ -f "${PROMPT_FILE}" ] && [ -r "${PROMPT_FILE}" ]; then
+                    EXTRA+=(--system-prompt-file "${PROMPT_FILE}")
+                else
+                    warn "CLAUDE_LMS_SYSTEM_PROMPT_FILE: ${PROMPT_FILE} is missing or unreadable: Claude Code's default prompt is used"
+                fi
+                ;;
+        esac
+    elif [ "${prompt_skip}" = 1 ] && [ -n "${PROMPT_FILE}" ]; then
+        warn "the command line has --system-prompt/--system-prompt-file/--bare: CLAUDE_LMS_SYSTEM_PROMPT_FILE is not applied"
+    fi
+fi
+
+# Optional diagnosis: one line with the argv — arguments only, never env values. The wrapper must
+# not break VS Code over a log, so a failure here is ignored. bash's printf %q keeps each argument
+# one word in the line (bash 3.2 has it).
+if [ -n "${CLAUDE_VSCODE_WRAPPER_LOG:-}" ]; then
+    {
+        printf '%s' "$(date '+%Y-%m-%dT%H:%M:%S')"
+        printf ' %q' "${CLAUDE}" ${EXTRA[@]+"${EXTRA[@]}"} "$@"
+        printf '\n'
+    } >>"${CLAUDE_VSCODE_WRAPPER_LOG}" 2>/dev/null || true
+fi
+
+exec "${CLAUDE}" ${EXTRA[@]+"${EXTRA[@]}"} "$@"

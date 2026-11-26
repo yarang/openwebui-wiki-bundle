@@ -1,0 +1,15 @@
+---
+config:
+  themeVariables:
+    xyChart:
+      plotColorPalette: "#1565c0, #c62828"
+  xyChart:
+    width: 900
+    height: 420
+---
+xychart-beta
+  title "동시 스트림 수별 스트림당 생성 속도 p50 (tok/s) — 선 2: 합격선 10"
+  x-axis "동시 스트림 수" ["1", "2", "4", "8", "16", "24", "32", "48", "64", "96", "128"]
+  y-axis "decode tok/s (스트림당)" 0 --> 50
+  line [47.1, 36.3, 28.8, 22.4, 16.4, 14.0, 12.2, 10.1, 8.8, 7.5, 5.5]
+  line [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]

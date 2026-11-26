@@ -3,8 +3,9 @@
 # Reset the Open WebUI admin password of a guardian install, offline. Accounts, chats and files are kept.
 #
 # Run it on the Mac itself, in a terminal (the password is read from the keyboard and never echoed or logged).
+# It ships at the root of the merged bundle, next to install-all.sh; run it from the extracted bundle folder.
 # Over ssh use -t, and quote the path so ~ is the remote home:
-#   ssh -t prod-mac '~/.guardian-llm/bin/reset-admin-password.sh'
+#   ssh -t site-mac 'bash ~/llm-wiki-bundle-YYYYMMDDTHHMMSSZ-macos-arm64/reset-admin-password.sh'
 #
 # What it does:
 #   1. stops the Open WebUI LaunchAgent so nothing writes the DB meanwhile
@@ -32,7 +33,7 @@ for arg in "$@"; do
         --email=*) EMAIL="${arg#--email=}" ;;
         --prefix=*) PREFIX="${arg#--prefix=}" ;;
         --port=*) PORT="${arg#--port=}" ;;
-        -h|--help) sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '3,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: ${arg}" >&2; exit 2 ;;
     esac
 done

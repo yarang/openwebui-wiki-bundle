@@ -1,11 +1,12 @@
 # 설치 중 발생한 문제와 해결
 
-오프라인 번들(guardian 기반 merged bundle)을 깨끗한 Mac(test-mac)과 운영 Mac(prod-mac)에 설치하면서
+오프라인 번들(guardian 기반 merged bundle)을 깨끗한 시험 Mac과 운영 Mac에 설치하면서
 실제로 겪은 문제를 정리합니다. 각 항목은 **증상 → 원인 → 해결 → 확인 방법** 순서입니다.
 
-- 1부: Claude Code를 번들에 넣고 LM Studio 로컬 모델로 돌리면서 생긴 문제 (2026-11-02, test-mac)
+- 1부: Claude Code를 번들에 넣고 LM Studio 로컬 모델로 돌리면서 생긴 문제 (2026-11-02, 시험 Mac)
 - 2부: 그 이전 번들 설치(LM Studio 앱, wiki-mcp, 설치 스크립트)에서 생긴 문제 (2026-10-24 ~ 10-27)
 - 3부: 남은 과제
+- 4부: 번들 검증 기록 (2026-10-26 ~ 10-27, guardian/README.md 에서 옮김)
 
 관련 파일: `guardian/install-claude-code.sh`, `guardian/claude-lms`, `guardian/install-all.sh`,
 `guardian/build-merged-bundle.sh`, `guardian/install-wiki.sh`
@@ -28,7 +29,7 @@ claude-lms (래퍼)
 
 - **증상**: `claude -p` 첫 호출에서 모델이 질문과 무관한 답을 하거나 도구 호출 형식이 깨짐.
 - **원인**: Claude Code의 시스템 프롬프트와 도구 정의만으로 입력이 약 **11.3k 토큰**입니다. LM Studio는
-  요청이 들어올 때 모델을 JIT 로드하는데, 이때 전역 기본 context(test-mac 8192, prod-mac 4096)를 씁니다.
+  요청이 들어올 때 모델을 JIT 로드하는데, 이때 전역 기본 context(시험 Mac 8192, 운영 Mac 4096)를 씁니다.
   프롬프트 앞부분이 잘린 채로 모델이 답합니다.
 - **해결**: `claude-lms`가 실행 전에 `lms ps --json`으로 로드 상태를 보고, 로드돼 있지 않으면
   `lms load <모델> --context-length <N> --identifier <모델> -y`로 직접 로드합니다. TTL은 주지 않습니다
@@ -42,7 +43,7 @@ claude-lms (래퍼)
 - **원인**: Open WebUI, wiki, Claude Code가 **같은 모델 id, 같은 인스턴스**를 공유합니다.
 - **해결**: `claude-lms`가 터미널(tty)에서 실행되면 `Reload it now? ... [y/N]`로 묻고, 비대화형
   (`-p`를 스크립트에서 실행 등)이면 다시 로드하는 명령을 보여 주고 종료합니다. 묻지 않고 끊지 않습니다.
-- **확인**: 8192로 로드한 상태에서 비대화형 실행 → 종료 코드 1과 reload 명령 출력 (test-mac에서 확인).
+- **확인**: 8192로 로드한 상태에서 비대화형 실행 → 종료 코드 1과 reload 명령 출력 (시험 Mac에서 확인).
 
 ### 1.3 `CLAUDE_CODE_AUTO_COMPACT_WINDOW=32768`이 무시됨 (100k 하한)
 
@@ -67,7 +68,7 @@ claude-lms (래퍼)
   ```
 
   stdout과 `--output-format json` 결과에는 섞이지 않으므로 스크립트에서 결과를 읽는 데 지장이 없습니다
-  (2026-11-02 test-mac 확인). 보기 싫으면 `2>/dev/null`. JSON 결과의 `total_cost_usd`도 Anthropic 요금표로 계산한
+  (2026-11-02 시험 Mac 확인). 보기 싫으면 `2>/dev/null`. JSON 결과의 `total_cost_usd`도 Anthropic 요금표로 계산한
   표시값일 뿐 실제 청구는 없습니다.
 
 ### 1.5 32k 창에서는 작업 여유가 약 10k 토큰뿐, 압축이 느림
@@ -77,7 +78,7 @@ claude-lms (래퍼)
   양이 약 10k 토큰입니다. 압축 자체도 같은 4B 모델이 요약하므로 오래 걸립니다.
 - **해결**: 기본값을 **65536**으로 올렸습니다(`CLAUDE_LMS_CONTEXT`, gemma-4-e4b 최대 131072). 근거는 아래 측정.
 
-**측정 (2026-11-02, test-mac M1 16GB, gemma-4-e4b-it-mlx 4bit)** — 긴 프롬프트 한 번을 보내며 모델 워커
+**측정 (2026-11-02, 시험 Mac M1 16GB, gemma-4-e4b-it-mlx 4bit)** — 긴 프롬프트 한 번을 보내며 모델 워커
 프로세스의 메모리(`top` MEM = `footprint`)를 2초마다 기록:
 
 | 로드 context | 프롬프트 토큰 | 처리 시간 | 워커 최대 메모리 | 처리 후 메모리 |
@@ -152,6 +153,24 @@ claude-lms (래퍼)
   4. LM Studio가 나열하는 첫 LLM (임베딩 모델 제외)
 
   그래서 `install-all.sh`는 wiki 단계 **다음에** Claude Code 단계를 실행합니다.
+- **별칭 쌍**: `google/gemma-4-e4b`와 `gemma-4-e4b-it-mlx`는 같은 모델의 두 id로 다룹니다.
+  - 2·3번에서 가져온 값이 목록에 없고 쌍의 다른 쪽이 있으면, 설치기가 그 id를 쓰고 알림을 출력합니다.
+    1번(`--model`)은 그대로 엄격히 검사합니다.
+  - wiki 설치기도 `.env`의 `WIKI_INGEST_MODEL`이 쌍의 한쪽이면, LM Studio가 그 값을 나열하지 않고
+    다른 쪽을 나열할 때만 바꿉니다(양방향). LM Studio가 응답하지 않으면 그대로 둡니다.
+  - LM Studio 카탈로그로 받은 Mac에서는 `~/.lmstudio/hub/models/google/gemma-4-e4b/` 때문에 번들과 같은
+    폴더가 `google/gemma-4-e4b`로 보입니다. 이 허브 폴더를 치우면 LM Studio 0.4.26이 폴더를 다시 색인하지
+    않아 모델이 목록에서 사라지니 지우지 않습니다.
+
+### 1.10a `--upgrade-app`이 "LM Studio is running"으로 멈춤 (기존 LM Studio가 있는 Mac)
+
+- **증상**: 설치 전에 LM Studio를 닫았는데도 2/7 앱 단계가 "LM Studio is running: close it first"로 멈춤.
+- **원인**: `~/.lmstudio/.internal/backend-preferences-v1.json`이 이미 있는 Mac에서는 1/7 guardian 단계가
+  `lms runtime select`를 부르고, 이것이 LM Studio를 `--run-as-service`로 띄웁니다. 이 인스턴스는 AppleScript
+  quit와 SIGTERM을 무시합니다.
+- **해결**: `install-all.sh`가 1/7 전에 떠 있던 LM Studio PID를 기록해 둡니다. 2/7에서 그 목록에 없고
+  `--run-as-service`로 뜬 인스턴스만 이번 실행이 깨운 것으로 보고 내립니다(SIGTERM, 5초 뒤 SIGKILL).
+  설치 전부터 떠 있던 LM Studio는 죽이지 않고 지금처럼 멈춥니다. `--dry-run`은 내릴 PID만 알려 줍니다.
 
 ### 1.11 USB/네트워크로 복사한 바이너리의 quarantine
 
@@ -219,7 +238,7 @@ claude-lms (래퍼)
 | 2.11 | raw ingest "No models loaded" | `WIKI_INGEST_MODEL=google/gemma-4-e4b`인데 번들 모델 id는 `gemma-4-e4b-it-mlx` (1.10과 같은 원인) | 번들 모델 id로 수정 |
 | 2.12 | 깨끗한 Mac에서 스크립트 오류 | 테스트 Mac은 Homebrew bash 5가 먼저, 실제 새 Mac은 `/bin/bash` 3.2뿐. python3도 없음 | 깨끗한 PATH로 테스트, JSON은 `plutil`로 읽기 |
 | 2.13 | `log show`가 이상하게 동작 | zsh에 `log` 내장 명령이 있음 | `/usr/bin/log` 전체 경로 사용 |
-| 2.14 | prod-mac 재부팅 후 서비스가 안 뜸 | FileVault 잠금 해제와 사용자 로그인 전에는 LaunchAgent가 시작되지 않음 | 화면에서 잠금 해제·로그인 후 확인 |
+| 2.14 | 운영 Mac 재부팅 후 서비스가 안 뜸 | FileVault 잠금 해제와 사용자 로그인 전에는 LaunchAgent가 시작되지 않음 | 화면에서 잠금 해제·로그인 후 확인 |
 | 2.15 | 한국어 RAG 검색 품질 낮음 | nomic 임베딩은 한국어 top-1 3/14 | bge-m3(14/14)로 교체, 재색인 |
 
 ---
@@ -227,13 +246,33 @@ claude-lms (래퍼)
 ## 3부. 남은 과제
 
 - [x] **기본 context 결정**: 32768 → 65536 (1.5의 측정). 새 기본값으로 설치 → 32768 로드 상태에서 비대화형
-      실행은 reload 명령을 보여 주고 종료, 미로드 상태에서는 65536으로 자동 로드 후 `-p` 응답 확인(test-mac).
+      실행은 reload 명령을 보여 주고 종료, 미로드 상태에서는 65536으로 자동 로드 후 `-p` 응답 확인(시험 Mac).
 - [ ] **64k 창에서 대화형 압축 시간**: 실제 Claude Code 세션에서 압축이 몇 초 걸리는지 측정.
-- [ ] **오프라인 검증**: 인터넷을 끊은 test-mac에서 `claude-lms` 실행 → 외부 접속 0건 확인.
+- [ ] **오프라인 검증**: 인터넷을 끊은 시험 Mac에서 `claude-lms` 실행 → 외부 접속 0건 확인.
 - [ ] **auto mode 평가**: 4B 모델로 권한 판정이 쓸 만한지, 기본 모드를 바꿀지.
-- [x] **prod-mac 설치** (2026-11-02): 키트 `~/Desktop/project/claude-code-2.1.316`(sha256 확인)에서
+- [x] **운영 Mac 설치** (2026-11-02): 키트 `~/Desktop/claude-code-2.1.316`(sha256 확인)에서
       `install-claude-code.sh` 실행 → Claude Code 2.1.316, 모델 `google/gemma-4-e4b`(WIKI_INGEST_MODEL), context
       65536, `~/.zshrc` PATH 블록(원본은 키트 폴더의 `zshrc.before-*`). 미로드 상태에서 `claude-lms -p`가 65536으로
       로드(8초) 후 `pong`, 전체 26초. 이후 여유 메모리 34%. 이 Mac의 JIT 기본 context는 4096이므로 Open WebUI가
       나중에 모델을 내리고 다시 JIT 로드하면 `claude-lms`가 다시 로드를 묻습니다(1.2).
-- [ ] **prod-mac 대화형 첫 실행**: 테마·신뢰 화면(1.6)을 사용자가 직접 통과.
+      > 2026-11-10: 같은 Mac을 아래 항목처럼 **2.1.321로 갱신**했습니다.
+- [x] **Claude Code 2.1.321 갱신 + skill-guard 설치** (2026-11-10): 운영 Mac에서 묶음 설치로
+      2.1.317 → **2.1.321** 로 올리고 skill-guard(PreToolUse hook)를 붙였습니다. 세부 확인 기록은
+      [CLAUDE-LMS-SKILLS.md §6.5](dev/CLAUDE-LMS-SKILLS.md#65-skill-guard-pretooluse-hook-2026-11-09) 와
+      [CLAUDE-LMS-MANUAL.md](CLAUDE-LMS-MANUAL.md) 2.2절을 보세요.
+- [ ] **운영 Mac 대화형 첫 실행**: 테마·신뢰 화면(1.6)을 사용자가 직접 통과.
+
+---
+
+## 4부. 번들 검증 기록
+
+`guardian/README.md`의 "알려진 제약"에 있던 항목을 그대로 옮겼습니다. 수치는 당시 측정값이며, 아래 첫 항목의 "7.0GB·7.2GB"는 GiB(2^30바이트) 기준입니다.
+
+- 검증: 운영 Mac(기존 LM Studio 있음), 그리고 시험 Mac(LM Studio·`~/.lmstudio` 없는 클린 상태, 인터넷 차단)에서 확인했다. 번들 `20261026T070031Z`(LM Studio 0.4.26+4, wiki-mcp 0.2.4)로 설치 → LM Studio 첫 실행 → `install-wiki.sh` 재실행에서 서버 자동 시작·`check_models`(bge-m3, gemma 둘 다 있음)를 통과했고, 위키 저장소는 bge-m3 1024차원(컬렉션 metadata `embedding_model=text-embedding-bge-m3`), Open WebUI RAG 임베딩도 bge-m3 였다. raw 파일 하나가 gemma 를 거쳐 노트 2개가 되고 mcpo 재기동 없이 Chroma 행이 22 → 24 로 늘었으며, 질의 "호텔비 한도 넘으면 누가 승인해?" 에 새 노트가 hybrid 1위였다. 로그에 외부 접속 시도는 없었다. 강제 종료(SIGKILL) → 재실행 3초 만에 `:1234` 가 스스로 뜬다. 같은 번들을 `pack-bundle.sh` 로 압축한 7.0GB `.tar.xz` 를 복사해 `install-llm-wiki.sh` 하나로 설치했을 때도 같은 확인을 모두 통과했다(시험 Mac M1: 체크섬 + 풀기 5분 21초, 전체 7분 50초, 종료 코드 0). LM Studio 첫 실행과 위키 단계 재실행이 사람 손 없이 이어졌고, 앱이 다시 저장한 뒤에도 설정이 남았으며, 풀린 앱의 서명도 유효했다. 앱 대신 공식 dmg 를 넣은 번들 `20261027T130325Z`(7.2GB, dmg 가 이미 압축돼 있어 0.2GB 커짐)도 같은 클린 시험 Mac 에서 인터넷을 끊고 통과했다(전체 8분, 종료 코드 0): dmg 에서 `/Applications` 로 설치된 앱의 서명이 유효하고 quarantine 표시·임시 폴더·붙은 이미지가 남지 않았으며, Gatekeeper 대화상자 없이 첫 실행이 이어졌다. 앱이 켜진 채 다시 실행하면 dmg 를 열지 않고 "same or newer: kept" 로 넘어가 47초 만에 끝났다. 로그인(재부팅) 직후 LM Studio 가 스스로 뜨는지는 확인하지 않았다.
+
+- 재측정(2026-11-10, 설치를 건드리지 않는 범위): 배포 중인 Mac(Apple M4·16GB, macOS 26.4, 서비스 실행 중)에서 번들 `20261027T130325Z`의 `.tar.xz`(7,731,155,680바이트 ≈ 7.2GiB)를 빈 폴더에 두고, `install-llm-wiki.sh`가 실행하는 두 명령만 같은 방식으로 돌렸다(`caffeinate`로 잠자기 차단).
+  - `shasum -a 256 -c`: 14초, OK
+  - `/usr/bin/tar -xJf`: 3분 44초(224초), 풀린 크기 약 9.3GiB(9,801,612KiB), `install-all.sh` 있음
+  - 측정 중 다른 서비스가 실행 중이었다(부하 평균 약 1.6 → 2.8). 다른 Mac에서 번들을 복사한 시간(네트워크 전송)은 번들 성능이 아니므로 뺐다.
+  - `install-all.sh`는 돌리지 않았다. 운영 중인 서비스를 건드리지 않기 위해서다. 그래서 전체 설치 시간(8분), 다시 실행 47초, 강제 종료 후 3초 재기동, Chroma 22 → 24는 위 항목의 클린 M1 측정값 그대로다.
+  - 위 항목의 "체크섬 + 풀기 5분 21초"는 다른 번들(`20261026T070031Z`, 앱 포함)을 다른 하드웨어(M1)에서 잰 값이라 이번 3분 58초(14초 + 224초)와 바로 비교할 수 없다.

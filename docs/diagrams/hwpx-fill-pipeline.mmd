@@ -1,0 +1,18 @@
+%% hwpx fill 안전 파이프라인 — 어느 단계든 실패하면 출력 파일 없이 ERROR (CLAUDE-LMS-MANUAL.md §6)
+flowchart TD
+    A["hwpx fill 양식 값.json 출력"] --> P1["입력 점검<br/>인자 수 · 입력 크기/형식 · 출력 경로(입력과 같음·이미 있음 거부)"]
+    P1 --> P2["값 점검<br/>JSON 중복 키 · 문자열/정수만 · 같은 칸을 가리키는 키"]
+    P2 --> P3["문서 열기<br/>한/글이 못 여는 문서(F4) 거부"]
+    P3 --> P4["칸 찾기<br/>표 라벨·누름틀 매칭 · 제어 문자 · 한 칸을 여러 라벨이 가리킴"]
+    P4 --> P5["정적 판정 (field_nesting)<br/>중첩·겹침·구간 밖 서식·구간 안 비글자 내용"]
+    P5 --> SNAP["채우기 전 스냅샷<br/>대상 칸 · 누름틀 · 양식 밖 내용 · 구간 밖 글자 서식"]
+    SNAP --> F["채우기 (fill_requested)"]
+    F --> Q["사후 점검<br/>안 채워진 키 · 누름틀 손상/분할 · 양식 밖 변화 · 서식 변화"]
+    Q -->|모두 통과| SV["save_validated<br/>같은 폴더 임시 파일 → 다시 열어 검증 → 권한(umask) → 하드 링크로 게시 → 임시 파일 삭제"]
+    SV --> OK["OK 절대경로<br/>N개 칸을 채웠습니다, 검증 통과"]
+    ERR["ERROR 사유 (rc 1)<br/>출력 파일·임시 파일 없음"]
+    P1 & P2 & P3 & P4 & P5 & Q & SV -.->|실패| ERR
+    classDef bad fill:#f8d7da,stroke:#a33,color:#000
+    classDef good fill:#d4edda,stroke:#2a7,color:#000
+    class ERR bad
+    class OK good

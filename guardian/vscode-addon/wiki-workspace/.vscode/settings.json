@@ -1,0 +1,17 @@
+{
+  "foam.edit.linkReferenceDefinitions": "off",
+  "foam.openDailyNote.onStartup": false,
+  "foam.files.ignore": [
+    "**/.vscode/**",
+    "**/.foam/**",
+    "**/*.bak",
+    "**/*.bak.*",
+    "**/.obsidian/**",
+    "**/node_modules/**"
+  ],
+  "files.exclude": {
+    "**/*.bak": true,
+    "**/*.bak.*": true
+  },
+  "markdown.validate.enabled": false
+}

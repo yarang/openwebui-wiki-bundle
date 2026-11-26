@@ -1,0 +1,31 @@
+%% claude-lms 시작 순서 — 점검 → 모델 적재(필요 시 재적재) → claude exec (CLAUDE-LMS-MANUAL.md §3)
+sequenceDiagram
+    autonumber
+    actor U as 사용자
+    participant W as claude-lms
+    participant L as LM Studio :1234
+    participant C as claude
+
+    U->>W: claude-lms [옵션·프롬프트]
+    W->>W: ~/.config/claude-lms/env 읽기<br/>(환경 변수가 우선)
+    W->>W: 모델 이름·claude 바이너리·lms 명령 확인
+    W->>L: GET /v1/models
+    alt 응답 없음
+        W-->>U: claude-lms: LM Studio does not answer … → 종료
+    end
+    W->>L: lms ps --json (적재 여부·contextLength)
+    alt 적재 안 됨
+        W->>L: lms load MODEL --context-length CTX(65536) --identifier MODEL -y
+    else 적재됐지만 context 부족
+        alt 터미널(TTY)
+            W->>U: Reload it now? … [y/N]
+            U->>W: y
+            W->>L: lms unload → lms load
+        else TTY 아님(파이프·스크립트)
+            W-->>U: claude-lms: reload it: lms unload … && lms load … → 종료
+        end
+    end
+    W->>W: 적재 유지 확인 (did not stay loaded → 종료)
+    W->>W: ANTHROPIC_BASE_URL·AUTH_TOKEN·모델 별칭<br/>텔레메트리 차단·MAX_CONTEXT_TOKENS=실제 context
+    W->>C: exec claude "$@"
+    C->>L: Anthropic Messages API 요청

@@ -1,0 +1,31 @@
+%% 설치 흐름 — 번들 설치(guardian → LM Studio 앱 → wiki → Claude Code)와 Claude Code 단계 안의 hwpx skill 자동 설치 (CLAUDE-LMS-MANUAL.md §2)
+flowchart TD
+    A["install-llm-wiki.sh<br/>sha256 확인 → 여유 공간 → 압축 풀기"] --> B["install-all.sh"]
+    B --> S1["guardian install.sh<br/>LM Studio 런타임·모델 · Python 3.12 · Open WebUI(~/.guardian-llm)"]
+    S1 --> S2["LM Studio.app 설치 (번들 dmg)"]
+    S2 --> S3["wiki-layer/install-wiki.sh<br/>wiki-mcp · mcpo · watch"]
+    S3 --> S4{"Claude Code 단계<br/>--no-claude-code ?"}
+    S4 -->|건너뜀| END1["Claude Code 없이 완료"]
+    S4 -->|설치| I["claude-code/install-claude-code.sh"]
+    I --> I1["codesign 확인<br/>팀 Q6L2SF6YDW · com.anthropic.claude-code"]
+    I1 --> I2["~/.local/share/claude/versions/버전<br/>→ ~/.local/bin/claude (같거나 새 버전이면 유지)"]
+    I2 --> I3["claude-lms 복사<br/>→ ~/.local/bin/claude-lms"]
+    I3 --> I4["모델 결정: --model → 기존 env →<br/>WIKI_INGEST_MODEL → 첫 LLM<br/>(/v1/models로 검증)"]
+    I4 --> I5["~/.config/claude-lms/env 작성"]
+    I5 --> K0{"skill 단계<br/>--no-skills · claude-kit/ 없음 ·<br/>venv가 lxml.etree 못 읽음 ?"}
+    K0 -->|"건너뜀 (경고, rc 0)"| I6
+    K0 -->|설치| K1["TMPDIR에서 조립<br/>skill 복사 + python-hwpx 휠 unzip"]
+    K1 --> K2{"smoke<br/>from-md → validate OK ?"}
+    K2 -->|실패| KX["도구 오류 표시 후 중단<br/>~/.claude 변경 없음"]
+    K2 -->|OK| K3{"설치본과 같고<br/>래퍼 실행 가능 ?"}
+    K3 -->|예| K4["already up to date"]
+    K3 -->|아니오| K5["~/.claude/.claude-lms-hwpx.partial 로 복사<br/>lib 폴더 ACL (미지원 볼륨은 생략)"]
+    K5 --> K6["기존 설치 → ~/.claude/skills-backup/<br/>partial → ~/.claude/skills/hwpx (같은 볼륨 rename)"]
+    K4 --> I6
+    K6 --> I6["~/.zshrc PATH 블록 추가<br/>(--no-path로 생략)"]
+    I6 --> OK["claude-lms 에서 /hwpx 사용 가능"]
+    A -.->|"install-all 뒤"| F["LM Studio 첫 실행 → install-wiki.sh 한 번 더<br/>(이미 :1234 응답하면 생략)"]
+    classDef skill fill:#e7f1ff,stroke:#2f6db5,color:#000
+    classDef fail fill:#fde2e2,stroke:#b03030,color:#000
+    class K1,K2,K3,K4,K5,K6 skill
+    class KX fail

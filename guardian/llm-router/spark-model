@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# spark-model - see and change which model the DGX Spark is serving, via the local llm-router.
+#
+# Talks only to the router (default http://127.0.0.1:1240) and needs no tokens: the router holds
+# the spark-switch controller credentials. Switching is explicit (a model request never switches
+# anything by itself), and the Spark returns to its default profile on its own after an idle time.
+#
+# Usage:
+#   spark-model status                  state, current model, mode, phase, idle return, profile table
+#   spark-model list                    just the profile table
+#   spark-model use <profile> [--wait]  ask for <profile> to be served next ("default" and "pair"
+#                                       work too: "pair" loads the resident pair qwen3-instruct +
+#                                       qwen3-coder, which is also what "default" asks for when
+#                                       the controller default is pair);
+#                                       --wait polls until it is ready (10 s interval, 40 min max)
+#   spark-model default [--wait]        same as: use default
+#   spark-model -h | --help             this help
+#
+# Environment: LLM_ROUTER_URL (or LLM_ROUTER_PORT) overrides the router address; LLM_ROUTER_PYTHON
+# picks the JSON formatter (default ~/.guardian-llm/venv/bin/python, then python3; stdlib only).
+# ==============================================================================
+
+set -euo pipefail
+
+ROUTER="${LLM_ROUTER_URL:-http://127.0.0.1:${LLM_ROUTER_PORT:-1240}}"
+ROUTER="${ROUTER%/}"  # LLM_ROUTER_URL=http://127.0.0.1:1240/ works too
+
+PY="${LLM_ROUTER_PYTHON:-$HOME/.guardian-llm/venv/bin/python}"
+if ! command -v "${PY}" >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
+        PY="$(command -v python3)"
+    else
+        echo "spark-model: no python found for JSON formatting; set LLM_ROUTER_PYTHON" >&2
+        exit 1
+    fi
+fi
+
+die() { echo "spark-model: $*" >&2; exit 1; }
+usage() { sed -n '3,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+CODE="" BODY=""
+req() { # req <curl arguments...>  ->  sets CODE (HTTP status) and BODY (response body)
+    local tmp
+    tmp="$(mktemp "${TMPDIR:-/tmp}/spark-model.XXXXXX")"
+    # The status code comes from -w, the body from the file: output is captured whole first,
+    # never `cmd | grep -q` (which races with pipefail when the consumer exits early).
+    if ! CODE="$(curl -sS --max-time 30 -o "${tmp}" -w '%{http_code}' "$@")"; then
+        rm -f "${tmp}"
+        die "cannot reach the router at ${ROUTER} (is llm-router running?)"
+    fi
+    BODY="$(cat "${tmp}")"
+    rm -f "${tmp}"
+}
+
+# One formatter for status/list. argv[1] picks the mode; the JSON arrives on stdin. Only double
+# quotes appear in the python below, so the whole program can live in one bash single-quoted string.
+PY_SHOW='
+import json, sys, time
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "status"
+d = json.load(sys.stdin)
+sw = d.get("switch") or {}
+
+def table(d):
+    served = set()
+    for m in (d.get("spark") or {}).get("models") or []:
+        if isinstance(m, dict) and m.get("id"):
+            served.add(m["id"])
+    profiles = sw.get("profiles") or []
+    if not profiles:
+        print("  (no profiles reported)")
+        return
+    width = max([len(p.get("name") or "") for p in profiles] + [4])
+    fmt = "  %-" + str(width) + "s  %-7s  %-9s  %-7s  %s"
+    print(fmt % ("NAME", "KIND", "VERIFIED", "LOADED", "DESCRIPTION"))
+    for p in profiles:
+        name = p.get("name") or "?"
+        loaded = "*" if name in served else "-"
+        verified = "yes" if p.get("verified") else "no"
+        print(fmt % (name, p.get("kind") or "-", verified, loaded, (p.get("description") or "")[:70]))
+
+if mode == "status":
+    def line(label, value):
+        print("%-13s %s" % (label + ":", value))
+    state = sw.get("state") or "unknown"
+    if not d.get("switch_ok"):
+        state = state + "  (stale: the last status probe failed)"
+    line("state", state)
+    line("current", sw.get("current") or "(none)")
+    swmode = sw.get("mode")
+    if isinstance(swmode, str) and swmode:
+        shown = swmode
+        if swmode == "pair":
+            residents = [r for r in (sw.get("residents") or []) if isinstance(r, str)]
+            if residents:
+                shown = shown + " (" + " + ".join(residents) + ")"
+        line("mode", shown)
+    slots = sw.get("slots")
+    if isinstance(slots, list) and slots:
+        for s in slots:
+            if isinstance(s, dict):
+                print("  slot %s  :%s  %s" % (s.get("slot"), s.get("port"), s.get("profile") or "-"))
+    line("phase", sw.get("phase") or "-")
+    at = sw.get("idle_return_at")
+    if isinstance(at, (int, float)) and at > 0:
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(at))
+        line("idle return", when + " (in ~%d min)" % max(int((at - time.time()) / 60), 0))
+    else:
+        line("idle return", "-")
+    err = sw.get("last_error")
+    line("last_error", err.splitlines()[0] if err else "-")
+    print("")
+table(d)
+'
+
+fetch_status() {
+    req "${ROUTER}/v1/spark/status"
+    case "${CODE}" in
+        200) return 0 ;;
+        404) die "spark switch not configured on the router (set SPARK_SWITCH_URL in ~/.config/llm-router/env)" ;;
+        *) die "router answered HTTP ${CODE} for /v1/spark/status" ;;
+    esac
+}
+
+cmd_status() {
+    fetch_status
+    printf '%s' "${BODY}" | "$PY" -c "$PY_SHOW" status
+}
+
+cmd_list() {
+    fetch_status
+    printf '%s' "${BODY}" | "$PY" -c "$PY_SHOW" list
+}
+
+cmd_use() { # cmd_use <profile> <extra: "" or --wait>
+    local profile="$1" extra="$2" data
+    case "${extra}" in
+        ""|--wait) ;;
+        *) die "unknown option: ${extra}" ;;
+    esac
+    # The profile name is JSON-encoded by python, not string-interpolated by hand.
+    data="$(printf '%s' "${profile}" | "$PY" -c 'import json, sys
+print(json.dumps({"profile": sys.stdin.read().strip()}))')"
+    req -X POST -H "content-type: application/json" -d "${data}" "${ROUTER}/v1/spark/switch"
+    case "${CODE}" in
+        200|202)
+            printf '%s' "${BODY}" | "$PY" -c '
+import json, sys
+
+d = json.load(sys.stdin)
+if d.get("state") == "ready":
+    print("already serving " + (d.get("current") or "?") + " (nothing to do)")
+else:
+    print("switch accepted: target " + str(d.get("target") or "?") +
+          " (state: " + str(d.get("state")) + "), use --wait to follow it")
+'
+            ;;
+        *)
+            printf '%s' "${BODY}" | "$PY" -c '
+import json, sys
+
+code = sys.argv[1]
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("switch failed (HTTP " + code + ")")
+    sys.exit(1)
+e = d.get("error")
+msg = e.get("message") if isinstance(e, dict) else None
+if not msg:
+    msg = json.dumps(d)
+if isinstance(d.get("retry_after"), int):
+    msg = msg + " (retry_after: " + str(d["retry_after"]) + " s)"
+print("switch failed (HTTP " + code + "): " + msg)
+' "${CODE}"
+            exit 1
+            ;;
+    esac
+    if [ "${extra}" = "--wait" ]; then
+        wait_ready "${profile}"
+    fi
+}
+
+wait_ready() { # wait_ready <asked profile or "default">
+    local asked="$1" deadline summary state current phase err default expected last=""
+    deadline=$(( $(date +%s) + 40 * 60 ))
+    echo "waiting for ${asked}: polling every 10 s, giving up after 40 minutes"
+    while :; do
+        sleep 10
+        if [ "$(date +%s)" -ge "${deadline}" ]; then
+            die "gave up waiting for ${asked} after 40 minutes"
+        fi
+        req "${ROUTER}/v1/spark/status"
+        if [ "${CODE}" != "200" ]; then
+            continue
+        fi
+        summary="$(printf '%s' "${BODY}" | "$PY" -c '
+import json, sys
+
+sw = (json.load(sys.stdin).get("switch") or {})
+err = sw.get("last_error") or ""
+print(sw.get("state") or "unknown")
+print(sw.get("current") or "-")
+print(sw.get("phase") or "-")
+print(err.splitlines()[0] if err else "-")
+print(sw.get("default") or "-")
+')"
+        state="$(printf '%s\n' "${summary}" | sed -n 1p)"
+        current="$(printf '%s\n' "${summary}" | sed -n 2p)"
+        phase="$(printf '%s\n' "${summary}" | sed -n 3p)"
+        err="$(printf '%s\n' "${summary}" | sed -n 4p)"
+        default="$(printf '%s\n' "${summary}" | sed -n 5p)"
+        expected="${asked}"
+        if [ "${asked}" = "default" ] && [ "${default}" != "-" ]; then
+            expected="${default}"  # the controller resolves "default" to a real profile name
+        fi
+        if [ "${phase}" != "${last}" ]; then
+            echo "  phase: ${phase} (state: ${state}, current: ${current})"
+            last="${phase}"
+        fi
+        if [ "${state}" = "ready" ] && [ "${current}" = "${expected}" ]; then
+            echo "${expected} is ready and serving"
+            return 0
+        fi
+        if [ "${state}" = "failed" ]; then
+            die "switch failed: ${err}"
+        fi
+    done
+}
+
+cmd="${1:-}"
+if [ $# -gt 0 ]; then shift; fi
+
+case "${cmd}" in
+    status)
+        [ $# -eq 0 ] || die "status takes no arguments"
+        cmd_status
+        ;;
+    list)
+        [ $# -eq 0 ] || die "list takes no arguments"
+        cmd_list
+        ;;
+    use)
+        [ $# -ge 1 ] || die "usage: spark-model use <profile> [--wait]"
+        [ $# -le 2 ] || die "usage: spark-model use <profile> [--wait]"
+        cmd_use "$1" "${2:-}"
+        ;;
+    default)
+        [ $# -le 1 ] || die "usage: spark-model default [--wait]"
+        cmd_use default "${1:-}"
+        ;;
+    -h|--help)
+        usage
+        ;;
+    "")
+        usage >&2
+        exit 2
+        ;;
+    *)
+        echo "spark-model: unknown command: ${cmd}" >&2
+        usage >&2
+        exit 2
+        ;;
+esac

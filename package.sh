@@ -63,6 +63,8 @@ rsync -a \
   --exclude='backups/' \
   --exclude='filled-output/' \
   --exclude='test-output/' \
+  --exclude='archive/' \
+  --exclude='MANIFEST.md' \
   ./ "$STAGE/"
 
 # 아카이브 생성 (macOS 확장속성 제외)

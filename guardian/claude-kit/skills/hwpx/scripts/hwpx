@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# hwpx skill 래퍼: guardian 번들 파이썬으로 hwpx_tool.py 를 실행한다.
+set -u
+PY="${CLAUDE_LMS_PY:-$HOME/.guardian-llm/venv/bin/python}"
+# 파이썬 없음(파일이 아님)과 실행 불가(실행 권한·해석기·내용)를 나눠 본다. 실행 불가는 종료 코드가
+# 아니라 stdout 표지로 가린다(/usr/bin/true 처럼 0 을 돌려주는 가짜도 있으므로).
+SAFE_PY="$(printf '%s' "$PY" | tr -d '[:cntrl:]')"
+if [ ! -f "$PY" ]; then
+  printf 'ERROR 파이썬 없음: %s (guardian 번들 설치 필요)\n' "$SAFE_PY"
+  exit 2
+fi
+# 사전 점검의 시간 제한은 perl 이 있을 때만 건다(alarm 은 exec 뒤에도 유지되어 끝나지 않는 파이썬을 5초에 끊는다).
+# stderr 는 SIGALRM 로 죽은 자식에 대한 셸 자신의 메시지까지 막는다. 표지 줄만 흉내 내는 가짜 실행 파일이나 자식을
+# 따로 띄우고 stdout 을 붙잡는 shim 은 사전 점검으로 막을 수 없다(실제 명령 exec 로만 걸린다).
+if [ -x /usr/bin/perl ]; then
+  PROBE="$(exec 2>/dev/null; /usr/bin/perl -e 'alarm 5; exec @ARGV' "$PY" -I -c 'print("hwpx-py-ok")')"
+else
+  PROBE="$(exec 2>/dev/null; "$PY" -I -c 'print("hwpx-py-ok")')"
+fi
+if [ ! -x "$PY" ] || [ "$PROBE" != hwpx-py-ok ]; then
+  printf 'ERROR 파이썬을 실행할 수 없음: %s (guardian 번들 설치 필요)\n' "$SAFE_PY"
+  exit 2
+fi
+# 심볼릭 링크로 불려도 실제 파일 위치를 찾는다: readlink(옵션 없음) 를 최대 40번 따라가고,
+# 상대 대상은 현재 링크의 폴더 기준으로 이어 붙인다. 순환 링크는 40번에서 멈춘다.
+SELF="$0"
+COUNT=0
+while [ -L "$SELF" ] && [ "$COUNT" -lt 40 ]; do
+  LINK="$(readlink "$SELF")"
+  case "$LINK" in
+    /*) SELF="$LINK" ;;
+    *) SELF="$(dirname -- "$SELF")/$LINK" ;;
+  esac
+  COUNT=$((COUNT + 1))
+done
+DIR="$(CDPATH= cd -- "$(dirname -- "$SELF")" >/dev/null 2>&1 && pwd)" || DIR=""
+if [ -z "$DIR" ]; then
+  printf 'ERROR hwpx skill 폴더로 이동하지 못했습니다\n'
+  exit 2
+fi
+if [ ! -e "$DIR/hwpx_tool.py" ]; then
+  printf 'ERROR hwpx skill 설치가 불완전합니다(scripts/hwpx_tool.py 없음)\n'
+  exit 2
+fi
+if [ ! -f "$DIR/hwpx_tool.py" ] || [ ! -r "$DIR/hwpx_tool.py" ]; then
+  printf 'ERROR hwpx skill 설치가 불완전합니다(scripts/hwpx_tool.py 를 읽을 수 없음)\n'
+  exit 2
+fi
+exec "$PY" -I "$DIR/hwpx_tool.py" "$@"

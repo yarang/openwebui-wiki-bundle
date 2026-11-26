@@ -1,8 +1,16 @@
 # Open WebUI + Wiki MCP 오프라인 설치 가이드 (자체 완결형)
 
+> **이 문서는 구 흐름(단독 번들) 참고용입니다. 현행 제품 설치에는 쓰지 마세요.**
+> 제품은 guardian 통합 번들이고, 설치는 [`guardian/README.md`](guardian/README.md)의 `install-llm-wiki.sh` 흐름입니다.
+> 통합 번들은 LaunchAgent(`dev.guardian.*`), `~/llm-wiki`, `~/.guardian-llm` 경로를 쓰며, 이 문서의 `.venv`·`run-*.sh` 절차와 다릅니다.
+>
+> 두 흐름에 공통이라 지금도 참조되는 장: 6장(15개 도구 목록), 7장(데이터 넣기, 템플릿, raw 변환, 청킹, 문서 추출, OCR).
+> 현행 설치는 [`docs/INSTALL-GUIDE.md`](docs/INSTALL-GUIDE.md), 현행 운영은 [`docs/OPERATIONS.md`](docs/OPERATIONS.md), 설치 후 사용은 [`docs/USAGE.md`](docs/USAGE.md)를 보세요.
+> 이 문서의 구 흐름 운영 절차는 이 문서에서 뺐습니다(내부 저장소의 `archive/`에만 보관하며 공개본에는 들어 있지 않습니다).
+
 인터넷이 차단된(에어갭) 환경에서 **Open WebUI 0.12.3** 와 **wiki-mcp**(LLM Wiki를 MCP tool로
 노출) + **mcpo**(REST 브리지)를 하나로 설치하는 절차입니다. 소스·wiki 콘텐츠·의존성이 모두
-이 디렉토리(`openwebui/`) 안에 있어 외부 저장소 없이 단독 운영됩니다.
+번들 디렉토리(`$OW`) 안에 있어 외부 저장소 없이 단독 운영됩니다.
 
 > 검증 환경: macOS arm64 · uv 0.11.7 · Python 3.12.13 · open-webui 0.12.3 (번들 wheel 기준)
 >
@@ -24,8 +32,8 @@
 | 항목 | 요구사항 |
 | --- | --- |
 | OS | macOS (Apple Silicon / arm64) |
-| uv | 0.5 이상 (검증: 0.9.21) — **대상 장비에 미리 설치되어 있어야 함** |
-| Python | 3.11 또는 3.12 인터프리터가 **대상 장비에 미리 존재해야 함** (검증: 3.12.12) |
+| uv | 0.5 이상 (검증: 0.11.7) — **대상 장비에 미리 설치되어 있어야 함** |
+| Python | 3.11 또는 3.12 인터프리터가 **대상 장비에 미리 존재해야 함** (검증: 3.12.13) |
 | 디스크 | 약 3GB 이상 여유 공간 (`.venv` 약 1.9GB + 번들 약 834MB) |
 | 네트워크 | **완전 불필요** — 모든 wheel이 로컬 번들에 포함 |
 
@@ -47,7 +55,7 @@ wheel 번들만으로는 해결되지 않는 부분입니다.
 확인:
 
 ```bash
-uv --version                    # uv 0.5.x 이상 (검증: 0.9.21)
+uv --version                    # uv 0.5.x 이상 (검증: 0.11.7)
 uv python list --only-installed # 로컬에 실제 존재하는 인터프리터만 표시
 ```
 
@@ -69,18 +77,18 @@ $OW/                          # 번들을 푼 디렉토리 (이름·위치 자�
 ├── wiki/                     # ★ wiki 콘텐츠 (예제로 seed됨 — 여기에 새로 구축)
 │   └── .templates/           # 노트 양식 템플릿 (concept, guide) — 7-4 참고
 ├── raw/                      # 원문 투입 → LLM이 노트로 자동 변환 — 7-6 참고
-├── ocr/                      # Apple Vision OCR 헬퍼 (vision-ocr 바이너리) — 7-9 참고
+├── ocr/                      # Apple Vision OCR 헬퍼 (vision-ocr 바이너리, package.sh 가 빌드) — 7-9 참고
 ├── wiki-data/                # ChromaDB + 인덱스 캐시 (자동 생성, gitignore 권장)
 ├── .venv/                    # (선택) 이미 설치된 가상환경
 ├── install.sh                # ★ 원커맨드 오프라인 설치 (3-0)
-├── run-wiki-mcp.sh           # ★ wiki-mcp 통합 실행기 (serve|mcpo|watch)
+├── run-wiki-mcp.sh           # ★ wiki-mcp 통합 실행기 (serve|http|mcpo|watch)
 ├── .env.example              # 환경 변수 예시 → cp .env.example .env
 ├── load-env.sh               # .env 로더 (실행 스크립트가 공용으로 사용)
 ├── run-openwebui.sh          # Open WebUI 실행기 (.env 자동 로드)
 └── INSTALL.md                # 이 문서
 ```
 
-- wiki-mcp는 `openwebui/wiki-mcp` 복사본을 **editable(`-e`)로 설치** — 소스 수정 즉시 반영
+- wiki-mcp는 번들 안 `wiki-mcp/` 소스를 **editable(`-e`)로 설치** — 소스 수정 즉시 반영
 - wiki 콘텐츠는 **이전 데이터를 가져오지 않고** 예제 노트로 시작, 이 위에 새로 구축
 - 무거운 공통 의존성(`chromadb`·`mcp`·`rank-bm25`·`uvicorn` 등)은 Open WebUI 번들과 공유
 
@@ -159,12 +167,12 @@ from importlib.metadata import version
 for p in ["open-webui","wiki-mcp","mcpo","python-frontmatter","watchdog","passlib"]:
     print(f"{p:20s} {version(p)}")
 EOF
-# 예상: open-webui 0.12.3 / wiki-mcp 0.2.0 / mcpo 0.0.20 / python-frontmatter 1.3.0
+# 예상: open-webui 0.12.3 / wiki-mcp 0.2.6 / mcpo 0.0.20 / python-frontmatter 1.3.0
 #       watchdog 6.0.0 / passlib 1.7.4
 
 # editable 경로가 번들 내부를 가리키는지 (자체 완결 확인)
 "$OW/.venv/bin/python" -c "import open_webui, wiki_mcp.server; print(wiki_mcp.server.__file__)"
-# → .../openwebui/wiki-mcp/src/wiki_mcp/server.py
+# → $OW/wiki-mcp/src/wiki_mcp/server.py
 
 # CLI 동작
 "$OW/.venv/bin/open-webui" --help
@@ -186,7 +194,8 @@ cp .env.example .env       # 필요한 값만 주석 해제/수정
 - **우선순위**: 셸 환경변수 > `.env` > 스크립트 기본값
   → 일회성 오버라이드 가능: `WIKI_INGEST_MODEL=other ./run-wiki-mcp.sh watch`
 - `.env` 는 **gitignore 대상**입니다 (로컬 설정·비밀값이 커밋되지 않음)
-- `.env.example` 에 Open WebUI·wiki-mcp 설정이 **모두** 정리돼 있습니다
+- `.env.example` 에 Open WebUI·wiki-mcp 설정이 정리돼 있습니다. 공유 HTTP 서버(`http`)를 쓰려면
+  `WIKI_MCP_API_KEY`(필수)·`WIKI_MCP_PORT`·`WIKI_MCPO_UPSTREAM` 줄의 주석을 풀고 채웁니다
 
 ### 4-1. Open WebUI
 
@@ -207,13 +216,15 @@ cp .env.example .env       # 필요한 값만 주석 해제/수정
 > 재기동 간 세션을 유지하려면 고정 키를 지정하세요(1회 생성 후 재사용):
 >
 > ```bash
-> [ -f .webui_secret_key ] || python -c "import secrets; open('.webui_secret_key','w').write(secrets.token_hex(16))"
+> [ -f .webui_secret_key ] || "$OW/.venv/bin/python" -c "import secrets; open('.webui_secret_key','w').write(secrets.token_hex(16))"
 > export WEBUI_SECRET_KEY="$(cat .webui_secret_key)"
 > ```
 
 ### 4-2. Wiki MCP
 
 `run-wiki-mcp.sh`는 번들 내부 경로만 사용합니다. 기본 BM25-only(Ollama 불필요).
+이것은 **단독 번들의 기본값**입니다. guardian 통합 번들은 bge-m3 임베딩 하이브리드가
+기본입니다([`guardian/README.md`](guardian/README.md)).
 
 ```bash
 cd "$OW"        # 번들을 푼 디렉토리
@@ -221,12 +232,22 @@ cd "$OW"        # 번들을 푼 디렉토리
 # (A) Open WebUI 연결용 REST 브리지 (:8766)
 ./run-wiki-mcp.sh mcpo
 
-# (B) Claude Code / Cursor 직접 연결 (stdio)
+# (B) 공유 HTTP 서버 (:8765/mcp, Bearer 키) — Claude Code·VS Code·mcpo 가 함께 씀 (권장)
+./run-wiki-mcp.sh http
+
+# (C) Claude Code / Cursor 직접 연결 (stdio) — HTTP 서버를 안 쓸 때만
 ./run-wiki-mcp.sh serve
 
-# (C) wiki 변경 감지 자동 재인덱싱
+# (D) wiki 변경 감지 자동 재인덱싱
 ./run-wiki-mcp.sh watch
 ```
+
+> **벡터 저장소(Chroma)는 한 프로세스만 써야 합니다.** mcpo(stdio 자식)와 `serve` 를
+> 동시에 띄우면 wiki-mcp 가 둘이 되어 인덱스가 어긋날 수 있습니다. 여러 클라이언트를 함께
+> 쓰려면 (B) `http` 하나를 띄우고, mcpo 는 `.env` 에 `WIKI_MCPO_UPSTREAM=http` 를 넣어 그
+> 서버를 중계하게 하세요. HTTP 서버가 떠 있으면 `serve` 는 시작을 거부합니다.
+> guardian 통합 설치에서는 `install-all.sh` 5단계(**wiki-mcp kit**)가 이 구성을 자동으로
+> 잡습니다([`guardian/wiki-mcp-kit/README.md`](guardian/wiki-mcp-kit/README.md)).
 
 기본 환경 변수(스크립트 내장, 필요 시 오버라이드):
 
@@ -234,27 +255,53 @@ cd "$OW"        # 번들을 푼 디렉토리
 | --- | --- | --- |
 | `WIKI_PATH` | `./wiki` | wiki 콘텐츠 경로 |
 | `WIKI_DATA_DIR` | `./wiki-data` | 인덱스/벡터 DB 저장 |
-| `EMBEDDING_DISABLED` | `1` | BM25-only. 의미검색(하이브리드) 쓰려면 `0` — [docs/KNOWLEDGE-BASE.md](docs/KNOWLEDGE-BASE.md) 5장 |
+| `EMBEDDING_DISABLED` | `1` | BM25-only(단독 번들 기본값). 의미검색(하이브리드) 쓰려면 `0` — [docs/KNOWLEDGE-BASE.md](docs/KNOWLEDGE-BASE.md) 5장. guardian 통합 번들은 기본이 `0`(bge-m3 하이브리드) |
 | `WIKI_MCPO_PORT` | `8766` | mcpo 포트 |
 | `WIKI_MCPO_KEY` | (없음 — `.env` 필수) | mcpo API 키 |
+| `WIKI_MCP_PORT` | `8765` | 공유 HTTP 서버 포트 (`http`) |
+| `WIKI_MCP_API_KEY` | (없음 — `http` 에 필수) | 공유 HTTP 서버 Bearer 키 (`openssl rand -hex 24`) |
+| `WIKI_MCPO_UPSTREAM` | `stdio` | `http` 면 mcpo 가 자식을 띄우지 않고 공유 HTTP 서버를 중계 |
 
 ---
 
 ## 5. Wiki MCP 등록
 
-### Claude Code / Cursor (stdio)
+### Claude Code CLI · VS Code 확장 (권장: 공유 HTTP 서버)
 
-`command`를 `run-wiki-mcp.sh serve`로 지정하면 wiki 경로·모드 env가 스크립트에서 주입됩니다
+`./run-wiki-mcp.sh http` 로 띄운 서버(또는 guardian 의 wiki-mcp 꾸러미가 띄운 서버)를
+**user 범위**로 한 번 등록하면 모든 프로젝트에서 씁니다. VS Code 의 Claude Code 확장은 같은
+`~/.claude.json` 을 읽으므로 따로 등록할 필요가 없습니다(등록 뒤 창 다시 불러오기).
+
+```bash
+# 키는 .env 의 WIKI_MCP_API_KEY — 화면·문서에 남기지 않도록 변수로 넘깁니다
+( . ./load-env.sh; load_env .env
+  claude mcp add --transport http -s user wiki "http://127.0.0.1:${WIKI_MCP_PORT:-8765}/mcp" \
+    -H "Authorization: Bearer ${WIKI_MCP_API_KEY}" )
+claude mcp get wiki      # Connected 확인
+```
+
+> - 등록 위치는 `~/.claude.json` 입니다(`~/.claude/settings.json` 이 아님).
+>   범위 우선순위는 local > project > user 이므로, 예전에 프로젝트에서 등록한 `wiki`
+>   (local 범위, 또는 프로젝트 `.mcp.json`)가 있으면 그쪽이 이깁니다 — `claude mcp list`
+>   로 확인하고 `claude mcp remove wiki -s local` 로 지우세요.
+> - 프로젝트 `.mcp.json` 에 넣을 때는 키를 그대로 적지 말고 환경 변수 확장을 씁니다:
+>   `"headers": {"Authorization": "Bearer ${WIKI_MCP_API_KEY}"}`.
+
+### Claude Code / Cursor (stdio — HTTP 서버를 안 쓸 때)
+
+HTTP 서버도 mcpo(stdio 모드)도 없이 클라이언트 하나만 쓸 때의 방식입니다. `command`를
+`run-wiki-mcp.sh serve`로 지정하면 wiki 경로·모드 env가 스크립트에서 주입됩니다
 (별도 env 설정 불필요 — 자체 완결).
 
 MCP 클라이언트는 `command`에 **절대 경로**를 요구합니다. 번들에서 아래로 값을 얻으세요:
 
 ```bash
 echo "$OW/run-wiki-mcp.sh"     # 이 출력값을 command에 그대로 붙여넣기
+claude mcp add -s user wiki -- "$OW/run-wiki-mcp.sh" serve   # Claude Code CLI
 ```
 
 ```json
-// ~/.claude/settings.json 또는 프로젝트 .mcp.json / ~/.cursor/mcp.json
+// 프로젝트 .mcp.json 또는 ~/.cursor/mcp.json
 {
   "mcpServers": {
     "wiki": {
@@ -268,6 +315,7 @@ echo "$OW/run-wiki-mcp.sh"     # 이 출력값을 command에 그대로 붙여넣
 > 직접 `wiki-mcp` 바이너리를 command로 쓰면 env 미주입 시 기본값(예제 wiki/Ollama)을
 > 바라보므로, 반드시 `run-wiki-mcp.sh serve`를 경유하거나 `env` 블록으로 `WIKI_PATH`/
 > `WIKI_DATA_DIR`/`EMBEDDING_DISABLED`를 명시하세요.
+> stdio 등록과 mcpo(stdio 모드)를 함께 쓰면 wiki-mcp 가 둘이 됩니다 — 4-2 의 주의 참고.
 
 ### Open WebUI
 
@@ -277,6 +325,7 @@ Open WebUI에서 **Settings → Tools → +Add Tool Server** 로 이동해 등�
 - API Key: `.env`의 `WIKI_MCPO_KEY` 값
 
 → 15개 tool 자동 등록. (먼저 `./run-wiki-mcp.sh mcpo` 로 브리지를 띄워야 함)
+공유 HTTP 서버를 중계하게 바꿔도(`WIKI_MCPO_UPSTREAM=http`) URL·키는 그대로입니다.
 
 ---
 
@@ -421,7 +470,7 @@ export WIKI_TEMPLATE_DIR=./wiki/.templates   # (선택) 템플릿 경로 변경
 
 | 도구 | 용도 |
 | --- | --- |
-| `search_wiki(query, top_k)` | BM25+임베딩 하이브리드 검색 (한/영, `[[id]]` 정확매칭) |
+| `search_wiki(query, top_k)` | BM25 검색, 임베딩을 켜면(`EMBEDDING_DISABLED=0`) BM25+임베딩 하이브리드 (한/영, `[[id]]` 정확매칭) |
 | `read_note(note_id)` | 특정 노트 원문 읽기 |
 | `find_related(note_id, depth)` | 링크 그래프 기반 관련 노트 탐색 |
 | `suggest_new_note(topic)` | 새 노트의 권장 ID·경로·cross-link 제안 |
@@ -446,6 +495,10 @@ raw/ (원문 drop)  ─추출→  Source 노트 보존  ─LLM+근거검증→  
 
 변환 지능은 **Open WebUI에 연결된 모델(OpenAI 호환 API)**이 담당합니다
 (wiki-mcp 자체에는 생성 LLM이 없음). 따라서 Open WebUI 서버와 API 키가 필요합니다.
+
+> **guardian 통합 번들에서는 다릅니다.** Open WebUI API를 거치지 않고 LM Studio
+> (`http://127.0.0.1:1234/v1/chat/completions`, 번들 기본 모델 `gemma-4-e4b-it-mlx`)로 바로
+> 보냅니다. 모델 id는 그 Mac의 LM Studio가 붙인 이름을 따르므로 `google/gemma-4-e4b`처럼 다를 수 있습니다. `WIKI_INGEST_URL`·`WIKI_INGEST_MODEL` 참고.
 
 **설정** (기본 off — 아래를 설정해야 활성화):
 
@@ -489,7 +542,9 @@ export WIKI_INGEST_API_KEY="<Open WebUI API 키>"          # Settings → Accoun
 - **양식 적용**: `WIKI_INGEST_TEMPLATE=concept` 설정 시 LLM이 템플릿의 각 섹션
   (`## 개요`/`## 핵심 내용`/`## 예시`)을 채웁니다. 미설정 시 LLM이 자유 구조로 작성.
 - 미설정(모델/키 없음) 상태에서 `watch`는 **기존처럼 재인덱싱만** 수행합니다(하위호환).
-- 변환은 모델 크기에 비례해 시간이 걸립니다(예: 로컬 12B 모델 약 1~1.5분/노트).
+- 변환은 모델 크기에 비례해 시간이 걸립니다(이전 단독 번들의 `gemma-4-e4b` GGUF로
+  잰 값이 약 46초/노트. guardian 번들 모델
+  `gemma-4-e4b-it-mlx`로는 아직 재지 않았습니다).
   변환 중에는 다른 감지 이벤트가 대기합니다. 대량 처리 시 더 작은 모델 권장.
 
 ### 7-7. 긴 문서 청킹 (여러 노트로 분할)
@@ -561,7 +616,8 @@ export WIKI_INGEST_XLSX_MAX_ROWS=200          # xlsx 시트당 직렬화 행 상
   렌더링하고 Vision으로 인식합니다. **대상 Mac에 Xcode/파이썬 추가 설치 불필요**
   (Vision·PDFKit·Swift 런타임은 macOS 기본 포함).
 - 기본 **활성화**(`WIKI_INGEST_OCR=1`). 텍스트 PDF에는 영향 없이, 스캔본에만 폴백으로 작동합니다.
-- 바이너리가 없으면 조용히 건너뜁니다(스캔본은 `.failed/`로 이동).
+- 바이너리가 없으면 조용히 건너뜁니다(스캔본은 `.failed/`로 이동). 바이너리는 저장소에 없고
+  `package.sh`가 패키징할 때 `swiftc`로 빌드해 넣습니다. 저장소에서 바로 설치했다면 아래 재빌드 명령으로 만듭니다.
 
 ```bash
 export WIKI_INGEST_OCR=1                       # OCR 폴백 (기본 on)
@@ -589,13 +645,13 @@ export WIKI_INGEST_OCR=1                       # OCR 폴백 (기본 on)
 
 ## 9. 다른 장비로 이관 (에어갭 포함)
 
-**openwebui 디렉토리 전체를 복사**하면 그대로 동작합니다(외부 wheel 의존 없음).
+**번들 디렉토리(`$OW`) 전체를 복사**하면 그대로 동작합니다(외부 wheel 의존 없음).
 단, 에어갭 대상 장비에는 **uv 바이너리**와 **호환 Python(3.11/3.12)**이 미리 준비되어
 있어야 합니다(1장 참조). 이 둘은 wheel 번들로 해결되지 않습니다.
 
-1. `openwebui/` 전체를 대상 장비로 복사 (`.venv`는 제외 권장 — 장비마다 재생성)
+1. `$OW` 전체를 대상 장비로 복사 (`.venv`는 제외 권장 — 장비마다 재생성)
 2. 3장 명령으로 Open WebUI + wiki-mcp + mcpo 설치 (setuptools 선설치 포함)
-3. `open-webui serve` / `./run-wiki-mcp.sh mcpo` 로 실행
+3. `./run-openwebui.sh` / `./run-wiki-mcp.sh mcpo` 로 실행 (4장. `open-webui serve`를 직접 쓰면 오프라인 변수·`.env`·`DATA_DIR`가 빠집니다)
 
 > `wiki/`와 `wiki-mcp/` 소스가 번들 안에 있으므로 editable 경로가 깨지지 않습니다.
 
@@ -617,6 +673,7 @@ export WIKI_INGEST_OCR=1                       # OCR 폴백 (기본 on)
 | 한국어 의미검색 필요 | `EMBEDDING_DISABLED=0` + 임베딩 백엔드(LM Studio/Ollama) — [docs/KNOWLEDGE-BASE.md](docs/KNOWLEDGE-BASE.md) 5장 |
 | LM Studio로 Open WebUI·Wiki MCP 통합 | 채팅·Knowledge 임베딩·재인덱싱 — [docs/LM-STUDIO.md](docs/LM-STUDIO.md) |
 | 의미검색 켰는데 벡터가 0개 | 캐시가 "변경 없음"으로 판단 → `rm wiki-data/index_cache.json` 후 재인덱싱 |
+| Claude Code 에서 wiki 안 보임 / 401 | `claude mcp get wiki` — HTTP 서버 미기동(`lsof -i :8765`) 또는 키 불일치(.env 의 `WIKI_MCP_API_KEY` 로 다시 등록) |
 | 포트 충돌 (8080 / 8766) | `open-webui serve --port <포트>` / `WIKI_MCPO_PORT=<포트> ./run-wiki-mcp.sh mcpo` |
 
 ---
@@ -625,7 +682,7 @@ export WIKI_INGEST_OCR=1                       # OCR 폴백 (기본 on)
 
 - `openwebui-packages/` 보충 wheel 5개:
   `python_frontmatter-1.3.0`, `watchdog-6.0.0`, `mcpo-0.0.20`, `passlib-1.7.4`, `wheel-0.47.0`
-- `.venv`: `wiki-mcp==0.2.0`(openwebui/wiki-mcp 복사본), `mcpo==0.0.20`,
+- `.venv`: `wiki-mcp==0.2.6`(번들 안 `wiki-mcp/` 소스), `mcpo==0.0.20`,
   `python-frontmatter`, `watchdog`, `passlib`, `setuptools`
 - 신규 디렉토리/파일: `wiki-mcp/`(소스 복사본), `wiki/`(예제 seed),
   `wiki/.templates/`(노트 양식), `raw/`(원문 투입), `run-wiki-mcp.sh`, `run-openwebui.sh`, `.env.example`

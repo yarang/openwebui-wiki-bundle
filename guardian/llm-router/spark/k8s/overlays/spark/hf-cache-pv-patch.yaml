@@ -1,0 +1,13 @@
+# Path-only patch for the hf-cache PersistentVolume. The repo value is a
+# placeholder; install-spark-k8s.sh rewrites hostPath.path to the real
+# HF cache directory ($HOME/.cache/huggingface by default) in its staged
+# copy before `kubectl apply -k` — the repository copy is never modified.
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: hf-cache
+spec:
+  hostPath:
+    path: /home/YOUR_USER/.cache/huggingface
+    type: Directory

@@ -1,40 +1,40 @@
-# wiki-mcp (번들 소스)
+# wiki-mcp (소스)
 
-LLM Wiki를 [MCP](https://modelcontextprotocol.io/) tool로 노출하는 서버입니다.
-이 디렉토리는 **오프라인 번들에 포함된 wiki-mcp 소스**이며, 번들 루트에서
-**editable(`-e`)로 설치**되어 소스 수정이 즉시 반영됩니다.
+LLM Wiki를 [MCP](https://modelcontextprotocol.io/) tool로 노출하는 서버입니다. 현재 버전 **0.2.5**.
+이 디렉토리는 저장소에 담긴 wiki-mcp 소스입니다. guardian 번들에서는 이 소스로 **wheel을 만들어**
+(`pip wheel`) 대상 Mac의 `~/.guardian-llm/venv`에 설치합니다. editable(`-e`) 설치는 쓰지 않습니다.
 
 ## 설치·설정·사용법
 
-번들 최상위 **`INSTALL.md`** 를 참조하세요. 이 문서가 단일 기준(single source of truth)입니다.
+현재 기준 문서는 **`guardian/README.md`**입니다 (번들 만들기·설치·운영).
+번들 루트의 `INSTALL.md`는 guardian 통합 이전의 **구 흐름(단독 번들)** 문서이므로 참고용으로만 보세요.
 
 | 내용 | 위치 |
 | --- | --- |
-| 오프라인 설치 | `INSTALL.md` 3장 (`install.sh` 원커맨드) |
-| 실행 (serve / mcpo / watch) | `INSTALL.md` 4장, 번들 루트 `run-wiki-mcp.sh` |
-| MCP 클라이언트 등록 | `INSTALL.md` 5장 |
-| 노출 도구 목록 | `INSTALL.md` 6장 |
-| 데이터 넣기·노트 양식·raw 자동 변환·청킹·문서추출·OCR | `INSTALL.md` 7장 |
-| 환경 변수 | `INSTALL.md` 7장 + 번들 루트 `.env.example` |
-
-> 실행은 번들 루트의 `run-wiki-mcp.sh` 를 사용하세요(wiki/raw/템플릿 경로와 오프라인
-> 모드가 자동 주입됩니다). 이 디렉토리 안에 별도 실행 스크립트는 두지 않습니다.
+| 번들 만들기·설치·운영 (현행) | `guardian/README.md` |
+| 구 흐름 설치 (참고용) | 번들 루트 `INSTALL.md` |
+| 노출 도구 목록 (15개) | `src/wiki_mcp/server.py` |
+| 환경 변수 | `src/wiki_mcp/config.py` + `guardian/wiki.env.example` |
 
 ## 소스 구성
 
 ```text
 src/wiki_mcp/
-├── server.py      # FastMCP 서버 — MCP tool 정의/등록
+├── server.py      # FastMCP 서버 — MCP tool 정의/등록 (15개)
 ├── indexer.py     # 인덱싱 + 하이브리드 검색 (BM25 / 임베딩)
+├── autoindex.py   # mcpo 프로세스 안에서 노트 변경 감지 → 자동 재인덱싱(임베딩)
 ├── graph.py       # [[id]] 링크 그래프
 ├── writer.py      # 노트 생성·수정·삭제 (검증·백업·템플릿)
 ├── ingest.py      # raw 원문 → 노트 변환 (LLM, 아웃라인→작성 청킹)
 ├── extract.py     # 문서 텍스트 추출 (PDF/docx/pptx/xlsx/html) + OCR 연동
-├── watch.py       # 파일 감시 — 자동 재인덱싱 + raw 자동 변환
+├── watch.py       # raw 폴더 감시 — 원문 자동 변환 (재인덱싱은 autoindex가 담당)
 ├── config.py      # 환경 변수 / 경로 해석
-└── auth.py        # HTTP 모드 Bearer 인증
+├── auth.py        # HTTP 모드 Bearer 인증
+├── __main__.py    # `python -m wiki_mcp` 실행 지원
+└── __init__.py
 
 examples/sample-wiki/   # WIKI_PATH 미지정 시 폴백용 예제 (번들에서는 미사용)
 ```
 
-경로는 모두 **번들 루트 기준으로 자동 해석**되므로, 번들을 어느 위치에 풀어도 동작합니다.
+경로 해석: guardian 설치에서는 `~/llm-wiki/.env`의 절대경로를 사용합니다
+(LaunchAgent는 셸 프로필을 읽지 않습니다). `.env`가 없으면 번들 루트 기준 기본값으로 해석됩니다.

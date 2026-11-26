@@ -1,0 +1,13 @@
+%% skill-guard PreToolUse hook 판정 흐름 (CLAUDE-LMS-MANUAL.md §3.4 참고)
+flowchart TD
+    M["gemma: Skill(hwpx, args)"] --> H["Claude Code PreToolUse<br/>matcher: Skill<br/>(claude-lms --settings 로 이 실행에만 붙음)"]
+    H --> G["scripts/skill-guard (bash)<br/>python -I skill_guard.py, 5초 제한"]
+    G --> V{"입력·session_id·skill 이름<br/>모양이 맞고 상태 폴더가<br/>내 것·700·링크 아님?"}
+    V -->|아니오| A0["출력 없음 → 허용<br/>(fail-open, 기록 안 함)"]
+    V -->|예| S{"세션 파일에<br/>이 skill 이 있나?"}
+    S -->|없음| A1["이름 기록 → 허용<br/>SKILL.md 안내가 대화에 실림"]
+    S -->|있음| C{"scripts/{이름} 실행 파일 있고<br/>args 가 명령 모양·300자 이하·<br/>셸 특수 문자 없음?"}
+    C -->|예| D1["deny: Bash 로 실행하세요:<br/>~/.claude/skills/hwpx/scripts/hwpx {args}"]
+    C -->|"명령 파일만 있음"| D2["deny: … {명령} … 을 실행하세요<br/>(명령 목록: --help)"]
+    C -->|"명령 파일 없음"| D3["deny: 안내대로 Bash 등<br/>도구로 바로 실행하세요"]
+    D1 & D2 & D3 --> R["거부 이유가 도구 결과로 모델에 전달<br/>→ 다음 차례에 Bash 호출"]

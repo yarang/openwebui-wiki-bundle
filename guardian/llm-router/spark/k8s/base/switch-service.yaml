@@ -1,0 +1,16 @@
+# Controller API on the node's :8010, same port as the Docker install.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-switch
+  namespace: spark-llm
+  labels:
+    app: spark-switch
+spec:
+  type: LoadBalancer
+  selector:
+    app: spark-switch
+  ports:
+    - port: 8010
+      targetPort: 8010

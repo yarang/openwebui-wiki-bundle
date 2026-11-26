@@ -1,6 +1,6 @@
 # raw — 원문 투입 디렉토리
 
-여기에 원문 파일을 넣으면 `./run-wiki-mcp.sh watch` 데몬(ingestion 활성 시)이
+여기에 원문 파일을 넣으면 watch 데몬(LaunchAgent `dev.guardian.wiki-watch`)이
 LLM으로 위키 노트를 자동 생성합니다.
 
 지원 형식: 텍스트(`.txt`/`.md`/…) + **문서(`.pdf`/`.docx`/`.pptx`/`.xlsx`/`.html`)** + **이미지(`.png`/`.jpg`)**.
@@ -17,13 +17,9 @@ LLM으로 위키 노트를 자동 생성합니다.
 
 수동 실행: `ingest_raw` MCP 도구 호출 (watch 없이도 즉시 변환).
 
-활성화에는 생성 LLM 설정이 필요합니다 (`.env.example` 참고):
+자동 변환은 guardian 설치 때 이미 활성화되어 있습니다. 설정 파일은 `~/llm-wiki/.env`입니다:
 
-```bash
-export WIKI_INGEST_ENABLED=1
-export WIKI_INGEST_MODEL="<Open WebUI에 등록된 모델명>"
-export WIKI_INGEST_API_KEY="<Open WebUI API 키>"
-# WIKI_INGEST_URL 기본값: http://localhost:8080/api/chat/completions
-```
+- `WIKI_INGEST_MODEL=gemma-4-e4b-it-mlx` — LM Studio(`http://127.0.0.1:1234`)의 채팅·변환 모델
+- `WIKI_INGEST_API_KEY`는 비워 둬도 됩니다. LM Studio는 로컬이라 키가 필요 없습니다.
 
 > 이 디렉토리는 wiki 인덱싱 대상이 아닙니다(노트가 아님).

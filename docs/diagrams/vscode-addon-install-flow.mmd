@@ -1,0 +1,28 @@
+flowchart TD
+    A["vscode-addon-…tar.gz<br/>+ .sha256"] --> B["shasum -c<br/>압축 풀기"]
+    B --> C["./install-vscode.sh"]
+    C --> S0["0. SHA256SUMS 확인"]
+    S0 --> S1{"1. /Applications 에<br/>VS Code 있음?"}
+    S1 -- "같거나 새 버전" --> K["same or newer: kept"]
+    S1 -- "없음 / 옛 버전" --> D["dmg 읽기 전용 연결<br/>버전·bundle id·서명·팀 UBF8T346G9 확인"]
+    D --> Q["앱 복사 → quarantine 제거<br/>(이 앱만) → 제자리로 이동"]
+    K --> S2
+    Q --> S2["2. code --install-extension<br/>Foam · Claude Code (오프라인 vsix)"]
+    S2 --> S3["3. 확장 안 claude 바이너리<br/>서명·팀 Q6L2SF6YDW 확인 후<br/>quarantine 있으면 제거"]
+    S3 --> E{"4. ~/.config/claude-lms/env"}
+    E -- "ROUTER 있음" --> R["BASE :1240<br/>spark-large / local-fast"]
+    E -- "ROUTER 없음" --> L["BASE :1234<br/>CLAUDE_LMS_MODEL"]
+    E -- "env 없음" --> N["오프라인 설정만<br/>(Claude 항목 생략)"]
+    R --> U{"User settings.json<br/>비어 있음?"}
+    L --> U
+    N --> U
+    U -- "예" --> W["settings.json 작성 (600)"]
+    U -- "아니오" --> SF["settings.vscode-addon.jsonc<br/>옆 파일 + 붙여넣기 안내"]
+    W --> S5["5. ~/llm-wiki/wiki<br/>.vscode/settings.json · .foam/templates"]
+    SF --> S5
+    S5 --> F["code ~/llm-wiki/wiki<br/>→ 작업 영역 신뢰(Trust)"]
+
+    classDef ok fill:#e6f4ea,stroke:#2e7d32
+    classDef warn fill:#fff4e5,stroke:#ef6c00
+    class K,W,F ok
+    class SF,N warn

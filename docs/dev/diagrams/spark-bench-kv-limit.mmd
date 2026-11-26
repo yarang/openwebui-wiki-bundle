@@ -1,0 +1,13 @@
+flowchart LR
+  subgraph NOW["현재 설정 (실측)"]
+    U["gpu-memory-utilization 0.35<br/>≈ 41.7 GiB 예약"] --> W["가중치·실행 여유<br/>≈ 33 GiB"]
+    U --> KV["KV 캐시 5,717 블록<br/>= 91,472 토큰"]
+  end
+  KV --> C1["학생 32명 × 대화 3K 토큰<br/>≈ 96K 토큰 → 캐시 초과"]
+  C1 --> P["선점(preemption) 발생<br/>TTFT p95 31.6초 (unique 실측)"]
+  KV --> C2["같은 과제문 3K 공유 + 질문만 다름<br/>캐시 사용 12.8%"]
+  C2 --> OK["TTFT p95 0.68초 (shared 실측)"]
+  classDef bad fill:#fdecea,stroke:#c62828
+  classDef good fill:#e8f5e9,stroke:#2e7d32
+  class C1,P bad
+  class C2,OK good

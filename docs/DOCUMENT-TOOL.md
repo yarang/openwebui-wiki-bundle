@@ -16,6 +16,10 @@ Open WebUI 채팅에서 모델이 **Word 보고서·회의록, PowerPoint 발표
 
 ## 1. 사전 준비 (설치)
 
+> **구 흐름(단독 번들 기준)입니다.** guardian 번들을 설치한 Mac에서는 이 절의 설치 단계가 필요 없습니다.
+> 문서 라이브러리(python-docx·python-pptx·openpyxl)는 번들 venv(`~/.guardian-llm/venv/bin/python`)에 이미 들어 있고,
+> 테마는 `~/llm-wiki/document-templates`에 설치됩니다.
+
 `install.sh`가 문서 라이브러리(python-docx·python-pptx·openpyxl)를 오프라인으로 설치합니다.
 이미 설치한 장비라면 한 번만:
 
@@ -25,10 +29,10 @@ uv pip install --python .venv/bin/python --offline --no-index \
   --find-links=openwebui-packages python-docx python-pptx openpyxl
 ```
 
-테마 참조 파일은 저장소에 포함되어 있습니다. 새로 만들거나 갱신하려면:
+테마 참조 파일은 저장소에 포함되어 있습니다. 새로 만들거나 갱신하려면(guardian 설치 장비 기준):
 
 ```bash
-.venv/bin/python document-templates/build_theme.py   # theme-default.docx/pptx 생성
+~/.guardian-llm/venv/bin/python ~/llm-wiki/document-templates/build_theme.py   # theme-default.docx/pptx 생성
 ```
 
 ## 2. Tool 등록 (핵심)
@@ -36,15 +40,15 @@ uv pip install --python .venv/bin/python --offline --no-index \
 1. Open WebUI → **Workspace → Tools → ➕ (Create Tool)**
 2. `open-webui-tools/document_generator.py` 내용을 **그대로 붙여넣기** → **Save**
 3. 방금 만든 Tool의 **⚙️ Valves**에서 `templates_dir`을 **번들 안 `document-templates` 절대경로**로 설정
-   예: `/Users/<계정>/openwebui/document-templates`
+   예: `/Users/<계정>/llm-wiki/document-templates`(guardian 번들 설치 위치)
    (비워두면 코드 내장 기본 테마로 동작 — 파일 편집형 양식은 못 씀)
 
 > Tool 코드는 Open WebUI DB에 저장됩니다. 이후 코드를 고치면 **다시 붙여넣어** 갱신하세요.
 
 ## 3. "skill"로 만들기 — 모델 프리셋 (권장)
 
-Open WebUI엔 Claude식 Skill이 없어, **커스텀 모델**로 "문서 작성 도우미"를 만들면
-드롭다운에서 골라 쓰는 skill처럼 동작합니다.
+Open WebUI 0.12.3에는 네이티브 Skills 기능이 있습니다. 이 문서가 다루는 것은 Tool입니다.
+**커스텀 모델**로 "문서 작성 도우미"를 만들면 드롭다운에서 골라 쓰는 동안 이 Tool이 항상 붙어 동작합니다.
 
 1. **Workspace → Models → ➕**
 2. Base Model 선택 → 이름 "문서 작성 도우미"
@@ -120,8 +124,8 @@ Open WebUI엔 Claude식 Skill이 없어, **커스텀 모델**로 "문서 작성 
 
 1. **스크립트로 생성** — 이름과 강조색(hex)을 지정:
    ```bash
-   .venv/bin/python document-templates/build_theme.py corporate 1F4E79   # theme-corporate.*
-   .venv/bin/python document-templates/build_theme.py mint 0F766E
+   ~/.guardian-llm/venv/bin/python ~/llm-wiki/document-templates/build_theme.py corporate 1F4E79   # theme-corporate.*
+   ~/.guardian-llm/venv/bin/python ~/llm-wiki/document-templates/build_theme.py mint 0F766E
    ```
 2. **Word로 편집** — `theme-default.docx`를 `다른 이름으로 저장 → theme-<이름>.docx`,
    스타일(`T Title`, `T H1` …)의 **서식만** 바꿉니다. **스타일 이름은 유지**해야 합니다
@@ -162,6 +166,9 @@ Open WebUI엔 Claude식 Skill이 없어, **커스텀 모델**로 "문서 작성 
 
 ## 8. 템플릿 자동화 (fill_template.py)
 
+> **구 흐름 · 저장소 전용입니다.** `fill_template.py`는 저장소 루트에만 있고 guardian 번들에는 들어가지 않습니다.
+> 문서 라이브러리가 있는 파이썬(예: guardian 번들 venv `~/.guardian-llm/venv/bin/python`)으로 저장소 루트에서 실행합니다.
+
 채팅 없이 **CLI만으로 템플릿을 채운 문서를 생성**한다. 콘텐츠 템플릿(`tpl-*.md`)의
 각 섹션을 더미(mock) 데이터로 채워 docx/pptx/md 파일을 만든다. 오프라인 환경 전용
 도구이며 LLM 연동은 지원하지 않는다.
@@ -184,9 +191,9 @@ tpl-*.md (콘텐츠 템플릿)     fill_template.py            결과 파일
 
 ```bash
 # 템플릿 목록
-.venv/bin/python fill_template.py --list
+~/.guardian-llm/venv/bin/python fill_template.py --list
 
-.venv/bin/python fill_template.py tpl-report-quarterly.md --topic "2분기 운영"
+~/.guardian-llm/venv/bin/python fill_template.py tpl-report-quarterly.md --topic "2분기 운영"
 ```
 
 ### 기본 제공 템플릿

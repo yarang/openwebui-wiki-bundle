@@ -13,17 +13,8 @@ last_updated: "2026-07-09"
 
 ## 설치 (요약)
 
-```bash
-# git 저장소에서 직접 설치
-pip install git+https://github.com/<TODO>/wiki-mcp.git
-
-# 또는 개발 모드
-git clone <repo>
-cd wiki-mcp
-pip install -e .
-```
-
-설치 후 `wiki-mcp` 명령이 PATH에 등록됩니다.
+guardian 통합 번들에서는 `wiki-mcp`를 설치 스크립트가 wheel로 자동 설치합니다
+(`~/.guardian-llm/venv`에 들어갑니다). GitHub에서 직접 받거나 pip으로 따로 설치할 필요가 없습니다.
 
 ## 첫 실행
 
@@ -49,7 +40,7 @@ WIKI_PATH=/path/to/my-wiki wiki-mcp
 
 - [[sample-concept|샘플 개념]] — 원자 노트의 frontmatter/링크 패턴
 - [[another-concept|또 다른 개념]] — 링크 그래프가 어떻게 형성되는지 확인
-- 상위 `docs/USAGE.md`의 "환경 변수" 절에서 모든 설정 옵션 확인
+- 설정 옵션은 [`docs/USAGE.md`의 "환경 변수"](../../docs/USAGE.md#환경-변수) 절에서 확인
 
 ## 관련 노트
 

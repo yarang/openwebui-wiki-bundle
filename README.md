@@ -3,7 +3,9 @@
 English | [한국어](README.ko.md)
 
 Source for installing and running a local AI workstation **fully offline** on an Apple Silicon Mac
-(macOS arm64) with no internet connection:
+(macOS arm64) with no internet connection. The product is the **guardian integrated bundle**
+([`guardian/`](guardian/)): one `.tar.xz` that `install-llm-wiki.sh` checks against its `.sha256` and turns into a full install.
+The repo root also keeps the older standalone openwebui-wiki bundle (see [Two bundles](#two-bundles)).
 
 - **LM Studio** runs the models locally (Gemma-4-E4B for chat, bge-m3 for embeddings)
 - **Open WebUI** is the chat front end
@@ -32,8 +34,11 @@ documents into raw/        →  LLM conversion        →  atomic notes in wiki/
 
 | Bundle | Contents | Built from this repo alone? | Docs |
 | --- | --- | --- | --- |
-| openwebui-wiki bundle (repo root) | Open WebUI + wiki-mcp | Yes | [`INSTALL.md`](INSTALL.md) |
-| Integrated bundle ([`guardian/`](guardian/)) | LM Studio (app + models) + Open WebUI + wiki-mcp + Claude Code (`claude-lms`) | No: it needs a base bundle (below) | [`guardian/README.md`](guardian/README.md), [`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md) |
+| Integrated bundle ([`guardian/`](guardian/)) — **the product** | LM Studio (app + models) + Open WebUI + wiki-mcp + Claude Code (`claude-lms`) | No: it needs a base bundle (below) | [`guardian/README.md`](guardian/README.md), [`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md) |
+| openwebui-wiki bundle (repo root) — old standalone flow | Open WebUI + wiki-mcp | Yes | [`INSTALL.md`](INSTALL.md) |
+
+The integrated bundle installs from three files (`<name>.tar.xz`, `<name>.tar.xz.sha256`,
+`install-llm-wiki.sh`) — see [Quick start](#quick-start).
 
 ### What is in this repo, and what is not
 
@@ -42,6 +47,8 @@ In the repo:
 - the wiki-mcp source, and the install and packaging scripts of the openwebui-wiki bundle
 - `guardian/build-merged-bundle.sh`, which adds the wiki layer, the bge-m3 embedding model, the official
   LM Studio dmg and Claude Code to a base bundle
+- `guardian/install-llm-wiki.sh` and `guardian/pack-bundle.sh` — the one-step installer for the target
+  Mac, and the packer that writes the three files it needs (`.tar.xz`, `.sha256`, installer)
 - `guardian/claude-lms` and `guardian/install-claude-code.sh` (Claude Code on LM Studio)
 - the install-pitfall log ([`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md)) and the manuals
 
@@ -65,13 +72,26 @@ cuts the prompt off. So the wrapper loads the model with a 64k context first.
 - A 4B model is weak at agentic work: name the tools you want ("Read calc.py, fix it with Edit, run it with
   Bash") and check every result.
 - Zero outbound traffic is the design goal; a full audit on a cut-off network is still to do.
-- To install it on its own, put the `claude` binary, its version in `VERSION`, `install-claude-code.sh` and
-  `claude-lms` in one folder and run `./install-claude-code.sh` (the integrated bundle does this as its last step).
+- To install it on its own, put the `claude` binary, its version in `VERSION`, `install-claude-code.sh`,
+  `claude-lms` and `claude-kit/` in one folder and run `./install-claude-code.sh` (the integrated bundle does this as its last step).
+- The same installer puts the Korean document skill `hwpx` (read, Markdown to HWPX, form filling) in
+  `~/.claude/skills/hwpx` (`--no-skills` skips it). Call it as `/hwpx …` in `claude-lms`. See [`docs/CLAUDE-LMS-MANUAL.md`](docs/CLAUDE-LMS-MANUAL.md) (Korean).
+
+## Add-ons: skill-guard and docgen
+
+- **skill-guard** — a `PreToolUse` hook that ships with each skill. When the same `Skill` is called
+  again in one session, it rejects the call and answers with the Bash command to run instead, cutting
+  the repeat-call loop of a small model. See [`docs/dev/CLAUDE-LMS-SKILLS.md`](docs/dev/CLAUDE-LMS-SKILLS.md) §6.5 (Korean).
+- **docgen** — an Open WebUI Tool that writes docx/pptx/xlsx from chat and returns a download link.
+  `install-wiki.sh` puts `open-webui-tools/` and `document-templates/` into `~/llm-wiki/`; registering
+  the Tool in Open WebUI is a manual step. See [`docs/DOCUMENT-TOOL.md`](docs/DOCUMENT-TOOL.md) (Korean).
 
 ## Build the bundle yourself
 
-There is no release to download. This repo keeps **sources and build scripts only**: large binaries do not
-belong in git. Build on a Mac with internet access, then copy the bundle to the target Mac.
+This repo publishes no ready-made release of its own; it keeps **sources and build scripts only** —
+large binaries do not belong in git. Build on a Mac with internet access and copy the bundle to the
+target Mac. A maintainer can then upload the result to the Release page of their own Gitea server
+(see [Release (maintainers)](#release-maintainers)).
 
 **openwebui-wiki bundle**: fill `openwebui-packages/` (macOS arm64, cp311 and cp312 wheels), then run `./package.sh`.
 
@@ -83,7 +103,9 @@ python3.12 -m pip download open-webui==0.12.3 mcpo==0.0.20 ./wiki-mcp -d openweb
 ```
 
 **Integrated bundle**: `guardian/build-merged-bundle.sh` merges a base bundle made by `build-llm-bundle.sh`
-with the official LM Studio dmg. See [`guardian/README.md`](guardian/README.md).
+with the official LM Studio dmg. See [`guardian/README.md`](guardian/README.md). The build's last step
+(`guardian/pack-bundle.sh`) writes the three files the target Mac needs next to the bundle:
+`<name>.tar.xz`, `<name>.tar.xz.sha256` and `install-llm-wiki.sh`.
 
 ```bash
 guardian/build-merged-bundle.sh dist/build/<base bundle> \
@@ -103,6 +125,23 @@ No sudo and no downloads are needed on the target Mac.
 
 ## Quick start
 
+**Integrated bundle (the product)** — copy the three files that the build made
+(`<name>.tar.xz`, `<name>.tar.xz.sha256`, `install-llm-wiki.sh`) into one folder on the target
+Mac (e.g. `~/bundles`), then run the installer (as in [`guardian/README.md`](guardian/README.md)):
+
+```bash
+cd ~/bundles                           # the folder holding the three files
+bash install-llm-wiki.sh --dry-run     # checksum and free-space checks, extract, show what it would do
+bash install-llm-wiki.sh               # install + start + LM Studio first launch + the wiki pass again
+```
+
+No sudo and no downloads are needed. When it finishes, Open WebUI is at http://localhost:8080 and
+the wiki services run as LaunchAgents (`dev.guardian.*`). First checks and the tool list:
+[`docs/USAGE.md`](docs/USAGE.md). raw → wiki conversion is already configured here (it talks to
+LM Studio at `127.0.0.1:1234` directly).
+
+> **Old flow (standalone bundle)** — install the repo-root bundle by hand:
+
 ```bash
 ./install.sh              # offline install (uv + local wheels) into .venv
 source .venv/bin/activate
@@ -111,24 +150,46 @@ open-webui serve          # http://localhost:8080
 ./run-wiki-mcp.sh watch   # watch raw/ → convert to wiki notes
 ```
 
-raw → wiki conversion is off by default: set `WIKI_INGEST_ENABLED=1`, `WIKI_INGEST_MODEL` and
-`WIKI_INGEST_API_KEY` first (see INSTALL.md). Without them, `watch` only reindexes.
+raw → wiki conversion is off by default in this bundle: set `WIKI_INGEST_ENABLED=1`,
+`WIKI_INGEST_MODEL` and `WIKI_INGEST_API_KEY` first (see INSTALL.md). Without them, `watch` only
+reindexes.
 
 ## Docs (Korean)
 
 | Doc | Contents |
 | --- | --- |
-| [`INSTALL.md`](INSTALL.md) | **Install and setup**: offline install, the 15 tools, templates, raw conversion, chunking, extraction, OCR |
+| [`guardian/README.md`](guardian/README.md) | **Install (current, integrated bundle)**: contents, the `install-llm-wiki.sh` flow, building the bundle, operations |
+| [`docs/INSTALL-GUIDE.md`](docs/INSTALL-GUIDE.md) | **Field install guide (integrated bundle)**: the three files, dry-run, the 7 install steps, options, post-install checks, troubleshooting |
+| [`INSTALL.md`](INSTALL.md) | **Install (old standalone-bundle flow, reference)**: offline install, the 15 tools, templates, raw conversion, chunking, extraction, OCR |
 | [`docs/USAGE.md`](docs/USAGE.md) | **User manual**: connecting and checking each part after install (Open WebUI) |
-| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **Operations**: starting services, launchd autostart, health checks, backups |
-| [`docs/TESTING.md`](docs/TESTING.md) | **Test strategy**: targets, priorities, how to run |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **Operations (integrated bundle)**: service map, daily checks, stop/start order, settings, backups, reindexing, admin password reset, rollback, incident table |
+| [`docs/CLAUDE-LMS-MANUAL.md`](docs/CLAUDE-LMS-MANUAL.md) | **claude-lms manual**: offline Claude Code on LM Studio, the `hwpx` skill, the office skills (docx, xlsx, pptx; §11), the skill-guard hook |
+| [`docs/dev/CLAUDE-LMS-SKILLS.md`](docs/dev/CLAUDE-LMS-SKILLS.md) | **Skills design and test log**: the `hwpx` skill, skill-guard (§6.5), the live test rounds |
+| [`docs/DOCUMENT-TOOL.md`](docs/DOCUMENT-TOOL.md) | **Document generator (docgen)**: registering the docx/pptx/xlsx Tool in Open WebUI |
+| [`docs/LLM-ROUTER.md`](docs/LLM-ROUTER.md) | **llm-router (installed by default)**: splits claude-lms requests between a large model on the Spark and LM Studio, `spark-model`, failure behavior |
+| [`docs/dev/LLM-ROUTER-TESTING.md`](docs/dev/LLM-ROUTER-TESTING.md) | **llm-router and Spark tests**: the unit-test suites and how to run them |
+| [`docs/dev/SPARK-BENCH-REPORT.md`](docs/dev/SPARK-BENCH-REPORT.md) | **DGX Spark benchmarks**: throughput and latency by concurrency, class-size estimates, pre-class advice |
+| [`docs/dev/TESTING.md`](docs/dev/TESTING.md) | **Test strategy**: targets, priorities, how to run |
 | [`docs/KNOWLEDGE-BASE.md`](docs/KNOWLEDGE-BASE.md) | **Building knowledge**: atomic-note rules, what to feed in, quality tuning, upkeep |
 | [`docs/LM-STUDIO.md`](docs/LM-STUDIO.md) | **LM Studio**: chat, Knowledge embeddings, sharing it with Wiki MCP, air-gap settings |
 | [`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md) | **Install pitfalls**: every problem met on clean Macs and how it was fixed |
 
+Development and test records live in [`docs/dev/`](docs/dev/README.md) (public, not shipped in the field bundle); internal docs live in `docs/internal/` (neither shipped nor published).
+
 After installing, start with the checklist in [`docs/USAGE.md`](docs/USAGE.md).
 
 ## Requirements (prepare on the target Mac)
+
+**Integrated bundle (the product)** — from [`guardian/README.md`](guardian/README.md):
+
+| Item | Note |
+| --- | --- |
+| macOS (Apple Silicon / arm64) | the installer refuses other platforms |
+| Free disk space | at least 2.5 × the `.tar.xz` archive + 2 GB |
+
+Nothing else: no sudo, no downloads. A clean Mac's `/usr/bin/tar` reads `.tar.xz` as is.
+
+> **Old flow (standalone bundle)** requirements:
 
 | Item | Note |
 | --- | --- |
@@ -140,7 +201,7 @@ After installing, start with the checklist in [`docs/USAGE.md`](docs/USAGE.md).
 ## Repository layout (sources only)
 
 ```text
-INSTALL.md            # full manual (single reference)
+INSTALL.md            # standalone-bundle manual (old flow; the current install doc is guardian/README.md)
 install.sh            # one-command offline install
 package.sh            # builds the release bundle (tar.gz)
 run-wiki-mcp.sh       # wiki-mcp launcher (serve | mcpo | watch)

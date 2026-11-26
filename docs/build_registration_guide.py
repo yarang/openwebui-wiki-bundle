@@ -2,7 +2,7 @@
 """문서 생성기 Tool '등록 가이드' PPT 생성기.
 
 산출물: docs/문서생성기-등록-가이드.pptx
-실행:   .venv/bin/python docs/build_registration_guide.py
+실행:   "$PPTX_PY" docs/build_registration_guide.py   # python-pptx 가 들어 있는 아무 파이썬
 """
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ r = p.add_run(); r.text = "Open WebUI · docx / pptx / xlsx 문서 생성 도구
 r.font.size, r.font.color.rgb, r.font.name = Pt(18), MUTED, KR
 tb3 = s.shapes.add_textbox(Inches(0.9), Inches(6.6), W - Inches(1.8), Inches(0.5))
 p = tb3.text_frame.paragraphs[0]
-r = p.add_run(); r.text = "example · document_generator v0.1.3"
+r = p.add_run(); r.text = "llm-wiki · document_generator v0.1.3"
 r.font.size, r.font.color.rgb, r.font.name = Pt(12), MUTED, KR
 
 # ── 개요 ─────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ tf = body(s)
 bullet(tf, "도구는 **모델에 붙여야** 채팅에서 호출됩니다. 둘 중 하나:", first=True)
 bullet(tf, "**간단** — 채팅 입력창의 도구(🔧) 아이콘에서 '문서 생성기' 켜기", level=1)
 bullet(tf, "그 대화에만 적용", level=1, size=15, color=MUTED)
-bullet(tf, "**권장(skill화)** — Workspace → Models → ➕ 로 '문서 작성 도우미' 생성", level=1)
+bullet(tf, "**권장(전용 모델)** — Workspace → Models → ➕ 로 '문서 작성 도우미' 생성", level=1)
 bullet(tf, "Tools 에서 문서 생성기 활성화 + System Prompt 로 작성 규칙 지정", level=1, size=15, color=MUTED)
 bullet(tf, "드롭다운에서 골라 쓰면 항상 도구가 붙어 나옴", level=1, size=15, color=MUTED)
 
@@ -211,7 +211,7 @@ tf = body(s)
 bullet(tf, "상세 문서: `docs/DOCUMENT-TOOL.md` (등록 · 테마 추가 · 문제 해결)", first=True)
 bullet(tf, "사용법: 채팅에서 자연어로 요청 → 보고서/회의록/발표자료/표")
 bullet(tf, "테마 추가: `document-templates/` 에 `theme-<이름>.docx` 넣기")
-bullet(tf, "재배포: git.example.com Release `docgen-v<버전>`")
+bullet(tf, "재배포: 사내 Git 서버 Release `docgen-v<버전>`")
 
 out = HERE / "문서생성기-등록-가이드.pptx"
 prs.save(str(out))

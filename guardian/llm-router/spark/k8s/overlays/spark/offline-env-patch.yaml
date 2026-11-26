@@ -1,0 +1,27 @@
+# Offline (air-gapped) overlay patch — applied ONLY to the staged overlay by
+# install-spark-k8s.sh when OFFLINE=1. The repository kustomization.yaml does
+# NOT reference this file: an online install must keep trying the registry
+# (imagePullPolicy: IfNotPresent) and HF Hub as usual.
+#
+# With HF_HUB_OFFLINE=1 huggingface_hub answers from the local cache only,
+# TRANSFORMERS_OFFLINE=1 keeps transformers from probing the Hub, and
+# TIKTOKEN_ENCODINGS_BASE points tiktoken at the bundled encoding files
+# (installed by install-spark-offline.sh into the HF cache directory, which
+# the hf-cache PVC mounts at /root/.cache/huggingface).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-coder
+spec:
+  template:
+    spec:
+      containers:
+        - name: vllm
+          env:
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+            - name: TIKTOKEN_ENCODINGS_BASE
+              value: /root/.cache/huggingface/tiktoken

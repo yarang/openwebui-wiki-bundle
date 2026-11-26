@@ -1,0 +1,51 @@
+# Static NVIDIA k8s-device-plugin DaemonSet (kube-system).
+#
+# Version pinned to v0.17.4: GB10 reports point to v0.17.4 (v0.18.0 with
+# driver 580.95.05 has known problems — design §9, NVIDIA forum thread).
+# The DGX OS already provides the driver and nvidia-container-toolkit; this
+# is the only piece of the GPU Operator we install.
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-device-plugin-daemonset
+  namespace: kube-system
+  labels:
+    k8s-app: nvidia-device-plugin
+spec:
+  selector:
+    matchLabels:
+      name: nvidia-device-plugin
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: nvidia-device-plugin
+    spec:
+      runtimeClassName: nvidia
+      priorityClassName: system-node-critical
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - image: nvcr.io/nvidia/k8s-device-plugin:v0.17.4
+          # Tag is pinned and the image ships inside the offline bundle
+          # (images/k8s-device-plugin.tar), so never fall back to a pull.
+          imagePullPolicy: IfNotPresent
+          name: nvidia-device-plugin-ctr
+          env:
+            - name: FAIL_ON_INIT_ERROR
+              value: "false"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins

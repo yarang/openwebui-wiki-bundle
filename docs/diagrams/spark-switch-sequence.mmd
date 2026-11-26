@@ -1,0 +1,36 @@
+sequenceDiagram
+  autonumber
+  actor U as 사용자
+  participant C as spark-model
+  participant R as llm-router :1240
+  participant S as spark-switch :8010
+  participant D as Docker
+  participant V as vllm-coder :8000
+
+  U->>C: spark-model use gpt-oss-120b --wait
+  C->>R: POST /v1/spark/switch {"profile":"gpt-oss-120b"}
+  R->>S: POST /switch (Bearer SWITCH_TOKEN)
+  S-->>R: 202 {"state":"switching"}
+  R-->>C: 202 (그대로 전달)
+  par 교체 작업 (컨트롤러 작업 스레드)
+    S->>D: stop · delete vllm-coder
+    S->>D: create (라벨 profile=gpt-oss-120b) · start
+    loop 5초마다, 최대 30분
+      S->>D: 컨테이너가 살아 있는지 확인
+      S->>V: GET /v1/models
+    end
+    V-->>S: data에 gpt-oss-120b 있음
+    S->>S: state=ready, current=gpt-oss-120b
+  and 그동안 들어온 요청
+    U->>R: model=gpt-oss-120b
+    R-->>U: 503 overloaded_error, Retry-After 60
+    U->>R: model=spark-large
+    R->>R: Spark /v1/models 실패 → down
+    R-->>U: 로컬 LM Studio로 대체 처리
+  end
+  loop 10초마다
+    C->>R: GET /v1/spark/status
+  end
+  R-->>C: state=ready, current=gpt-oss-120b
+  C-->>U: 준비 완료 (exit 0)
+  Note over S,V: 유휴 30분이면 컨트롤러가 기본 프로필(qwen3-coder)로 되돌린다

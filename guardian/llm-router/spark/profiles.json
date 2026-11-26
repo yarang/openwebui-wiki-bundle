@@ -1,0 +1,88 @@
+{
+  "gpt-oss-120b": {
+    "model": "openai/gpt-oss-120b",
+    "description": "추론이 많은 큰 작업 (120B MoE MXFP4)",
+    "kind": "text",
+    "verified": false,
+    "args": [
+      "--gpu-memory-utilization", "0.80",
+      "--max-model-len", "131072",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "openai",
+      "--reasoning-parser", "openai_gptoss"
+    ]
+  },
+  "qwen3-coder": {
+    "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+    "description": "코딩/도구 호출 (30B MoE FP8). 상주 페어 멤버 — 2026-11-14 측정: KV 약 23만 토큰",
+    "kind": "text",
+    "verified": true,
+    "args": [
+      "--gpu-memory-utilization", "0.40",
+      "--max-model-len", "131072",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "qwen3_coder"
+    ]
+  },
+  "qwen3-instruct": {
+    "model": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "description": "기본. 일반 대화/수업용 (30B MoE FP8). 상주 페어 멤버 — 2026-11-14 측정: KV 약 16만 토큰, 페어 상주 시 MemAvailable 약 14 GiB",
+    "kind": "text",
+    "verified": true,
+    "args": [
+      "--gpu-memory-utilization", "0.40",
+      "--max-model-len", "65536",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "hermes"
+    ]
+  },
+  "qwen3-coder-solo": {
+    "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+    "description": "Isaac Sim 병행 수업용 단독 코딩 모델 (util 0.45, KV 223,232 토큰, 남는 메모리 약 61 GiB — 2026-11-15 실측)",
+    "kind": "text",
+    "verified": true,
+    "args": [
+      "--gpu-memory-utilization", "0.45",
+      "--max-model-len", "65536",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "qwen3_coder"
+    ]
+  },
+  "gpt-oss-120b-lite": {
+    "model": "openai/gpt-oss-120b",
+    "description": "Isaac Sim 병행용 대형 모델 (util 0.65, KV 146,720 토큰, 남는 메모리 약 35 GiB — 2026-11-15 실측)",
+    "kind": "text",
+    "verified": true,
+    "args": [
+      "--gpu-memory-utilization", "0.65",
+      "--max-model-len", "131072",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "openai",
+      "--reasoning-parser", "openai_gptoss"
+    ]
+  },
+  "qwen3-next-80b": {
+    "model": "Qwen/Qwen3-Next-80B-A3B-Instruct-FP8",
+    "description": "긴 문서/일반 작업 (80B MoE FP8, 가중치 77GB라 KV 여유 작음)",
+    "kind": "text",
+    "verified": false,
+    "args": [
+      "--gpu-memory-utilization", "0.85",
+      "--max-model-len", "65536",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "hermes"
+    ]
+  },
+  "qwen3-vl-30b": {
+    "model": "Qwen/Qwen3-VL-30B-A3B-Instruct-FP8",
+    "description": "이미지 이해 (30B MoE FP8)",
+    "kind": "vision",
+    "verified": false,
+    "args": [
+      "--gpu-memory-utilization", "0.70",
+      "--max-model-len", "65536",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "hermes"
+    ]
+  }
+}

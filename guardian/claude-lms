@@ -8,6 +8,22 @@
 #   CLAUDE_LMS_MODEL     LM Studio model id (one /v1/models lists), e.g. google/gemma-4-e4b
 #   CLAUDE_LMS_URL       LM Studio server (default http://127.0.0.1:1234)
 #   CLAUDE_LMS_CONTEXT   least context length the model must be loaded with (default 65536)
+#   CLAUDE_LMS_ROUTER    llm-router base URL, e.g. http://127.0.0.1:1240; empty/unset = router mode off and
+#                       LM Studio is used directly, exactly as before. When the router answers /health, the
+#                       model names become router aliases instead (local is still loaded and checked below,
+#                       as the fast tier and the fallback for whenever the router or the Spark is down):
+#   CLAUDE_LMS_LARGE     alias for the main and sonnet models (default spark-large)
+#   CLAUDE_LMS_FAST      alias for haiku/background calls (default local-fast)
+#   CLAUDE_LMS_SUBAGENT  alias for subagents (default spark-large)
+#   CLAUDE_LMS_MAX_OUTPUT  output token cap for Claude Code (default 16384; prompt + this must fit the loaded context: the base prompt is ~11k tokens)
+#   CLAUDE_LMS_DISALLOWED_TOOLS  tools Claude Code must not offer the model, comma-separated (default empty = all).
+#                       e.g. Workflow,ScheduleWakeup,ReportFindings,ListAgents trims ~3.4k of the ~11k-token prompt
+#                       (passed as --disallowedTools; see docs/claude-code-prompt/README.md)
+#   CLAUDE_LMS_SYSTEM_PROMPT_FILE  a file whose text replaces Claude Code's own system prompt — the kit's slim
+#                       ~/.config/claude-lms/system-prompt.md (installed by install-claude-code.sh, left off: this
+#                       key turns it on). Empty/unset = Claude Code's default prompt. Passed as --system-prompt-file;
+#                       the file must exist and be readable, and a command line already holding --system-prompt,
+#                       --system-prompt-file or --bare wins over it.
 # Claude Code's system prompt and tools alone are ~10k tokens and a JIT load gets LM Studio's default context
 # (4096 or 8192), which cuts the prompt and leaves the model answering nonsense. So the model is loaded here with
 # CLAUDE_LMS_CONTEXT when it is not loaded yet, and Claude Code compacts the conversation within the loaded context.
@@ -18,18 +34,31 @@ set -euo pipefail
 CONF="${XDG_CONFIG_HOME:-${HOME}/.config}/claude-lms/env"
 # The environment wins over the file: keep what was set before sourcing it.
 _m="${CLAUDE_LMS_MODEL:-}"; _u="${CLAUDE_LMS_URL:-}"; _c="${CLAUDE_LMS_CONTEXT:-}"
+_r="${CLAUDE_LMS_ROUTER:-}"; _l="${CLAUDE_LMS_LARGE:-}"; _f="${CLAUDE_LMS_FAST:-}"; _s="${CLAUDE_LMS_SUBAGENT:-}"
+_o="${CLAUDE_LMS_MAX_OUTPUT:-}"; _t="${CLAUDE_LMS_DISALLOWED_TOOLS:-}"; _q="${CLAUDE_LMS_SYSTEM_PROMPT_FILE:-}"
 # shellcheck disable=SC1090
 if [ -f "${CONF}" ]; then . "${CONF}"; fi
 MODEL="${_m:-${CLAUDE_LMS_MODEL:-}}"
 URL="${_u:-${CLAUDE_LMS_URL:-http://127.0.0.1:1234}}"
 CTX="${_c:-${CLAUDE_LMS_CONTEXT:-65536}}"
 URL="${URL%/}"
+ROUTER="${_r:-${CLAUDE_LMS_ROUTER:-}}"
+LARGE="${_l:-${CLAUDE_LMS_LARGE:-spark-large}}"
+FAST="${_f:-${CLAUDE_LMS_FAST:-local-fast}}"
+SUBAGENT="${_s:-${CLAUDE_LMS_SUBAGENT:-spark-large}}"
+MAXOUT="${_o:-${CLAUDE_LMS_MAX_OUTPUT:-16384}}"
+DENY_TOOLS="${_t:-${CLAUDE_LMS_DISALLOWED_TOOLS:-}}"
+PROMPT_FILE="${_q:-${CLAUDE_LMS_SYSTEM_PROMPT_FILE:-}}"
+ROUTER="${ROUTER%/}"
 LMS="${HOME}/.lmstudio/bin/lms"
 CLAUDE="${HOME}/.local/bin/claude"
 
 die() { echo "claude-lms: $*" >&2; exit 1; }
 
 [ -n "${MODEL}" ] || die "no model: set CLAUDE_LMS_MODEL in ${CONF} (an id from: curl -s ${URL}/v1/models)"
+case "${MAXOUT}" in ''|*[!0-9]*|0) die "CLAUDE_LMS_MAX_OUTPUT must be a positive integer, not '${MAXOUT}'" ;; esac
+case "${DENY_TOOLS}" in *[[:cntrl:]]*) die "CLAUDE_LMS_DISALLOWED_TOOLS must be a comma-separated tool list with no newline or other control character" ;; esac
+case "${PROMPT_FILE}" in *[[:cntrl:]]*) die "CLAUDE_LMS_SYSTEM_PROMPT_FILE must be a file path with no newline or other control character" ;; esac
 [ -x "${CLAUDE}" ] || CLAUDE="$(command -v claude || true)"
 [ -n "${CLAUDE}" ] || die "claude is not installed: run install-claude-code.sh"
 [ -x "${LMS}" ] || die "${LMS} is missing: LM Studio has not been set up on this Mac"
@@ -78,18 +107,84 @@ elif [ "${have}" -lt "${CTX}" ]; then
 fi
 [ -n "${have}" ] || die "${MODEL} did not stay loaded"
 
-# Every model name Claude Code asks for (main, background haiku calls, subagents) goes to the one local model.
-export ANTHROPIC_BASE_URL="${URL}"
+# Every model name Claude Code asks for (main, background haiku calls, subagents) goes to the one local
+# model — or, when the router answers, to its aliases: the Spark for the main model and subagents (the
+# router fails those over to this same local model whenever the Spark is down), local for the fast calls.
+# The token stays the LM Studio one in both modes; the router ignores it and sets each backend's own key.
 export ANTHROPIC_AUTH_TOKEN="${CLAUDE_LMS_TOKEN:-lmstudio}"
-export ANTHROPIC_MODEL="${MODEL}"
-export ANTHROPIC_DEFAULT_OPUS_MODEL="${MODEL}" ANTHROPIC_DEFAULT_SONNET_MODEL="${MODEL}"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="${MODEL}" ANTHROPIC_SMALL_FAST_MODEL="${MODEL}"
-export CLAUDE_CODE_SUBAGENT_MODEL="${MODEL}"
+BASE="${URL}"; MAIN="${MODEL}"; FASTM="${MODEL}"; SUB="${MODEL}"
+if [ -n "${ROUTER}" ]; then
+    out="$(curl -fsS --max-time 1 "${ROUTER%/}/health" 2>/dev/null)" || out=""
+    if [ -n "${out}" ]; then
+        BASE="${ROUTER}"; MAIN="${LARGE}"; FASTM="${FAST}"; SUB="${SUBAGENT}"
+        echo "claude-lms: router ${ROUTER} (main ${LARGE}, fast ${FAST}, subagent ${SUBAGENT})" >&2
+    else
+        echo "claude-lms: router ${ROUTER} not answering; using LM Studio at ${URL} directly" >&2
+    fi
+fi
+export ANTHROPIC_BASE_URL="${BASE}"
+export ANTHROPIC_MODEL="${MAIN}"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="${MAIN}" ANTHROPIC_DEFAULT_SONNET_MODEL="${MAIN}"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="${FASTM}" ANTHROPIC_SMALL_FAST_MODEL="${FASTM}"
+export CLAUDE_CODE_SUBAGENT_MODEL="${SUB}"
 # The attribution header changes per request and would void LM Studio's prompt cache.
 export CLAUDE_CODE_ATTRIBUTION_HEADER=0
 # No updater, telemetry, error reports or other calls to Anthropic: this Mac may have no internet at all.
 export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_AUTOUPDATER=1
 # Claude Code assumes a 200k window for a model it does not know. This sets the model's window to what is really
-# loaded, and auto-compact follows it. (CLAUDE_CODE_AUTO_COMPACT_WINDOW cannot: it has a 100k floor.)
+# loaded, and auto-compact follows it. (CLAUDE_CODE_AUTO_COMPACT_WINDOW cannot: it has a 100k floor.) Router
+# mode keeps the local window too: the router can fail any request over to the local model, which must fit.
 export CLAUDE_CODE_MAX_CONTEXT_TOKENS="${have}"
-exec "${CLAUDE}" "$@"
+# Claude Code defaults to a 32000-token output cap. vLLM rejects a request whose input + max_tokens exceeds the
+# loaded window (65536), so with 32000 every request over 33,536 input tokens 400s; with 16384 that point moves
+# to 49,152. The base prompt itself is ~11k tokens (measured 10,952 with Claude Code 2.1.322).
+export CLAUDE_CODE_MAX_OUTPUT_TOKENS="${MAXOUT}"
+
+# The local model calls the Skill tool over and over (Skill only loads SKILL.md and runs nothing; gemma did it
+# 70 times in one session), "makes" office files by writing plain text into 회의록.docx, and stops to ask what
+# is next. So skill-guard rides along twice: a PreToolUse hook (matcher Skill|Write|Edit|MultiEdit|Bash) that
+# denies repeat Skill calls and Write/Edit/Bash-redirect office files, naming the Bash command to run instead,
+# and a Stop hook that blocks once when the skill's command was never run. The --settings JSON is hand-built,
+# so anything doubtful about the command line or HOME skips the injection and runs claude exactly as before.
+GUARD="${HOME}/.claude/skills/hwpx/scripts/skill-guard"
+SAFE_HOME='^[A-Za-z0-9/._ -]+$'
+INJECT=1
+SUBCMD=
+[ "${CLAUDE_LMS_SKILL_GUARD:-1}" != 0 ] || INJECT=0
+[ -x "${GUARD}" ] || INJECT=0
+case "${1:-}" in
+    mcp|config|update|doctor|install|plugin|migrate-installer|setup-token|auth) INJECT=0; SUBCMD=1 ;;
+esac
+[[ "${HOME}" =~ ${SAFE_HOME} ]] || INJECT=0
+for arg in "$@"; do
+    case "${arg}" in --settings|--settings=*) INJECT=0 ;; esac
+done
+# EXTRA: empty = Claude Code's default tool set; the user's own --disallowedTools/--tools on the command
+# line still apply after ours.
+EXTRA=()
+if [ -n "${DENY_TOOLS}" ] && [ -z "${SUBCMD}" ]; then EXTRA=(--disallowedTools "${DENY_TOOLS}"); fi
+# The replacement system prompt (CLAUDE_LMS_SYSTEM_PROMPT_FILE): the user's own --system-prompt,
+# --system-prompt-file or --bare on the command line wins — ours is not added then. The file must
+# exist and be readable, or this dies before claude runs on a prompt Claude Code cannot have seen.
+if [ -n "${PROMPT_FILE}" ] && [ -z "${SUBCMD}" ]; then
+    prompt_skip=0
+    for arg in "$@"; do
+        case "${arg}" in
+            --system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*|--bare) prompt_skip=1 ;;
+        esac
+    done
+    if [ "${prompt_skip}" = 1 ]; then
+        echo "claude-lms: the command line has --system-prompt/--system-prompt-file/--bare: CLAUDE_LMS_SYSTEM_PROMPT_FILE is not applied" >&2
+    else
+        [ -f "${PROMPT_FILE}" ] || die "CLAUDE_LMS_SYSTEM_PROMPT_FILE: ${PROMPT_FILE} does not exist"
+        [ -r "${PROMPT_FILE}" ] || die "CLAUDE_LMS_SYSTEM_PROMPT_FILE: ${PROMPT_FILE} is not readable"
+        EXTRA+=(--system-prompt-file "${PROMPT_FILE}")
+    fi
+fi
+if [ "${INJECT}" = 1 ]; then
+    # HOME is SAFE_HOME-only characters, so printf can build the JSON; the single quotes make the command one
+    # shell word even when HOME has spaces.
+    HOOKS="$(printf '{"hooks":{"PreToolUse":[{"matcher":"Skill|Write|Edit|MultiEdit|Bash","hooks":[{"type":"command","command":"\047%s\047","timeout":10}]}],"Stop":[{"hooks":[{"type":"command","command":"\047%s\047","timeout":10}]}]}}' "${GUARD}" "${GUARD}")"
+    exec "${CLAUDE}" --settings "${HOOKS}" ${EXTRA[@]+"${EXTRA[@]}"} "$@"
+fi
+exec "${CLAUDE}" ${EXTRA[@]+"${EXTRA[@]}"} "$@"

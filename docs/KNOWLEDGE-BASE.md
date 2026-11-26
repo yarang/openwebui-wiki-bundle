@@ -1,9 +1,9 @@
 # 지식 구축 가이드 — 실제 위키 만들기
 
-현재 `wiki/`에는 **예제 노트 4개**만 있습니다. 이 문서는 실제 지식을 쌓아
+현재 `wiki/`에는 **데모 노트 3개**(`concepts/`, 허브 `index.md` 제외)만 있습니다. 이 문서는 실제 지식을 쌓아
 검색·활용 가능한 위키로 키우는 방법과, 그 과정에서 마주칠 문제를 다룹니다.
 
-> 도구·설정 레퍼런스는 [`../INSTALL.md`](../INSTALL.md) 7장, 사용법은 [`USAGE.md`](USAGE.md).
+> 도구 사용법은 [`USAGE.md`](USAGE.md), 서비스·설정은 [`../guardian/README.md`](../guardian/README.md)을 참조하세요.
 
 ---
 
@@ -34,8 +34,8 @@ Source 노트로 돌아가 확인할 수 있습니다.
 처음부터 대량 투입하지 마세요. **문서 2~3개로 품질을 먼저 확인**합니다.
 
 ```bash
-cp 문서1.pdf raw/
-./run-wiki-mcp.sh watch          # 로그를 지켜보며 결과 확인
+cp 문서1.pdf ~/llm-wiki/raw/
+# guardian: watch(LaunchAgent dev.guardian.wiki-watch)가 자동 변환 — 로그 ~/llm-wiki/logs/watch.log
 ```
 
 확인할 것:
@@ -101,14 +101,13 @@ export WIKI_INGEST_MAX_CHARS=12000    # 창을 키워 아웃라인이 전체를 
 
 | 모델 | 노트당 시간 | 품질 |
 | --- | --- | --- |
-| 로컬 12B (`gemma-4-12b`) | ≈ 77초 | 높음 |
-| 로컬 소형 (`gemma-4-e4b`) | ≈ 46초 | 실용적 |
+| `gemma-4-e4b` GGUF (이전 단독 번들에서 측정) | ≈ 46초 | 실용적 |
+| `gemma-4-e4b-it-mlx` (guardian 기본) | 미측정 | — |
 
-**처리 시간 = 아웃라인 1회 + 노트당 1회**. 노트 5개면 6회 호출 ≈ 5분(소형 모델).
-대량 투입 시 소형 모델을 쓰고, 중요한 문서만 큰 모델로 다시 돌리는 방식이 현실적입니다.
+**처리 시간 = 아웃라인 1회 + 노트당 1회**. 노트 5개면 6회 호출입니다(구 단독 번들 GGUF의 호출당 ≈ 46초로 치면 ≈ 5분, guardian의 MLX 모델은 미측정).
 
 기존 노트 연결은 모델이 Wiki 전체를 이해한다고 가정하지 않습니다. ingest가 먼저 로컬
-BM25/hybrid 검색으로 관련 후보를 최대 8개 고르고, 모델은 그 후보 안에서만 링크를
+검색 인덱스(기본 하이브리드, 임베딩을 끄면 BM25)로 관련 후보를 최대 8개 고르고, 모델은 그 후보 안에서만 링크를
 선택합니다. 후보에는 ID뿐 아니라 제목과 태그도 포함됩니다. 모델이 후보 밖 ID를
 만들어도 실제 링크에는 반영되지 않습니다. 이 방식은 추가 LLM 호출 없이 작은
 컨텍스트에서 동작하지만, 검색 단계가 놓친 관련 노트까지 모델이 찾아내지는 못합니다.
@@ -142,66 +141,21 @@ export WIKI_INGEST_TEMPLATE=concept   # 모든 생성 노트에 양식 적용
 
 ## 5. 확장 (선택) — 의미 검색
 
-기본값은 **BM25-only**(키워드 검색)입니다. 오프라인·경량이지만
-"같은 뜻 다른 표현"을 못 잡습니다. 임베딩을 켜면 BM25 + dense를
-**하이브리드(RRF fusion)** 로 합쳐 검색합니다.
+guardian 번들은 기본적으로 **하이브리드 검색**으로 동작합니다.
+BM25(키워드)와 dense 벡터를 **RRF fusion**으로 합쳐 "같은 뜻 다른 표현"까지 잡습니다.
+설치만 하면 켜져 있고, 별도 설정이 필요 없습니다.
 
-임베딩 백엔드는 두 가지를 지원합니다.
+- 임베딩: LM Studio(`http://127.0.0.1:1234`)의 `text-embedding-bge-m3` — 1024차원
+- 인덱스: `~/llm-wiki/wiki-data/` — 노트가 바뀌면 해당 노트만 다시 임베딩
+- 설정: `~/llm-wiki/.env`의 `EMBEDDING_DISABLED=0`, `EMBEDDING_MODEL`, `OLLAMA_URL`
 
-### LM Studio (OpenAI 호환) — 실측 검증됨
+BM25-only로 돌리려면 `.env`에 `EMBEDDING_DISABLED=1`을 넣고 위키 서비스를 재기동합니다.
 
-```bash
-export EMBEDDING_DISABLED=0
-export EMBEDDING_PROVIDER=openai                              # OpenAI 호환 API
-export OLLAMA_URL=http://localhost:1234                       # base URL (변수명은 OLLAMA지만 재사용됨)
-export EMBEDDING_MODEL=text-embedding-nomic-embed-text-v1.5
-# EMBEDDING_API_KEY 는 LM Studio(로컬)에서는 불필요
-```
+임베딩 모델을 바꾸면(예: 차원이 다른 모델) wiki-mcp가 다음 기동 때 벡터 저장소를 새로
+만들어 전부 다시 임베딩합니다. 노트는 `wiki/`에 있으므로 안전합니다.
 
-**실측**: `text-embedding-nomic-embed-text-v1.5` → **768차원**, 노트 4개 임베딩 0.5초,
-하이브리드 검색이 BM25와 다른 랭킹을 정상 산출.
-
-### Ollama
-
-```bash
-export EMBEDDING_DISABLED=0
-export EMBEDDING_PROVIDER=ollama       # 기본값
-export OLLAMA_URL=http://localhost:11434
-export EMBEDDING_MODEL=bge-m3          # 한국어에 강함, 1024차원
-```
-Ollama에 모델을 미리 받아둬야 합니다 (에어갭이면 사전 반입).
-
-### ⚠️ 함정 1 — 켜도 벡터가 안 쌓인다
-
-인덱서는 **내용이 바뀐 노트만 임베딩**합니다(`wiki-data/index_cache.json`으로 판단).
-BM25-only로 운영하다 임베딩을 켜면, 캐시가 "변경 없음"이라 판단해 **임베딩 큐가 비고
-벡터 0개인 채로 조용히 넘어갑니다.**
-
-```bash
-rm wiki-data/index_cache.json     # 캐시를 비워야 전체 재임베딩됨
-```
-
-확인 방법:
-
-```bash
-python -c "
-import chromadb; from chromadb.config import Settings
-c=chromadb.PersistentClient(path='wiki-data/chroma', settings=Settings(anonymized_telemetry=False))
-print('벡터:', c.get_or_create_collection('wiki').count(), '개')"
-```
-
-### ⚠️ 함정 2 — 모델을 바꾸면 차원이 충돌한다
-
-ChromaDB 컬렉션은 차원이 고정됩니다. `nomic`(768) ↔ `bge-m3`(1024)처럼 **차원이 다른
-모델로 바꾸면 로드 에러**가 납니다. 모델을 바꿀 때는:
-
-```bash
-rm -rf wiki-data/          # 인덱스 전체 초기화 (노트는 wiki/에 있으므로 안전)
-```
-또는 `WIKI_DATA_DIR`를 모델별로 분리하세요.
-
-> **성능 주의**: 노트가 많으면 최초 임베딩에 시간이 걸립니다(노트당 1회 임베딩 호출).
-> 이후에는 변경된 노트만 갱신하므로 빠릅니다.
+> 과거 버전의 함정 — 임베딩 캐시 때문에 벡터가 안 쌓이던 문제(0.2.1에서 해결)와
+> 모델 변경 시 차원 충돌(0.2.2에서 해결)은 현재 버전에서 모두 해결되어 있습니다.
 
 ---
 
@@ -213,7 +167,7 @@ rm -rf wiki-data/          # 인덱스 전체 초기화 (노트는 wiki/에 있�
 | 노트 병합 도구 | 없음 (수동) | 과분할된 노트 정리 시 |
 | 변환 재시도 | 없음 (`raw/.failed/`에 방치) | 대량 투입 시 |
 | 변환 비동기화 | watch가 변환 중 블록 | 대량 투입 시 |
-| 노트 버전 관리 | `.bak` 파일만 | 협업 시 (git으로 `wiki/` 관리 권장) |
+| 노트 버전 관리 | `.bak` 파일만 | 협업 시 |
 
-`wiki/`를 **별도 git 저장소로 관리**하면 노트 이력·협업·롤백이 해결됩니다.
-번들 저장소와 분리하는 것을 권장합니다(데이터와 코드의 분리).
+git을 쓸 수 있는 환경이라면 `wiki/`를 별도 저장소로 관리하면 노트 이력과 롤백에 도움이 됩니다.
+번들 대상 Mac에는 git이 기본으로 설치되어 있지 않으므로 필수는 아닙니다.

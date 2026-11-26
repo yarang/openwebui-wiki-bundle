@@ -1,0 +1,19 @@
+# PVC bound (via volumeName) to the admin-created hostPath PersistentVolume
+# in k8s/cluster/hf-cache-pv.yaml. storageClassName: "" prevents k3s's
+# default local-path provisioner from dynamically provisioning a fresh
+# (empty) volume: the claim must bind to the pre-existing PV holding the
+# HuggingFace cache.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hf-cache
+  namespace: spark-llm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  volumeName: hf-cache
+  resources:
+    requests:
+      storage: 500Gi

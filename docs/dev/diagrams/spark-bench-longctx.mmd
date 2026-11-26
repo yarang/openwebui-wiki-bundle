@@ -1,0 +1,14 @@
+---
+config:
+  themeVariables:
+    xyChart:
+      plotColorPalette: "#1565c0, #c62828"
+  xyChart:
+    width: 900
+    height: 420
+---
+xychart-beta
+  title "입력 길이별 첫 토큰 지연 (요청 1건 단독, 초)"
+  x-axis "실제 입력 토큰" ["1,035", "3,984", "15,913", "31,776", "59,627"]
+  y-axis "TTFT (s)" 0 --> 32
+  bar [0.21, 0.87, 3.72, 10.37, 30.57]

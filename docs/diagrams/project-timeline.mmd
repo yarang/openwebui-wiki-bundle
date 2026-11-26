@@ -1,0 +1,11 @@
+%% 작업 이력 단계 — PROJECT-STATUS.md §3. 날짜는 git log 기준(2026년).
+flowchart LR
+    P1["<b>① 07-13 ~ 07-16</b><br/>오프라인 단독 번들<br/>───<br/>Open WebUI + wiki-mcp<br/>release.sh · 매뉴얼"]
+    P2["<b>② 07-22 ~ 07-28</b><br/>문서 생성기<br/>───<br/>wiki-mcp 패치 체계<br/>docgen v0.1.1 → v0.1.7<br/>테마 · fill_template"]
+    P3["<b>③ 10-24 ~ 10-27</b><br/>guardian 통합 번들<br/>───<br/>Open WebUI 0.12.3 · bge-m3<br/>tar.xz 한 스크립트 설치<br/>LM Studio dmg 동봉"]
+    P4["<b>④ 11-02 ~ 11-04</b><br/>오프라인 Claude Code<br/>───<br/>claude-lms 래퍼<br/>INSTALL-ISSUES<br/>README 한·영 분리"]
+    P5A["<b>⑤ 11-08 ~ 11-13</b><br/>문서 skill · 가드<br/>───<br/>hwpx · docx · xlsx · pptx<br/>skill-guard 1~5차<br/>(엄격 7/7)"]
+    P5B["<b>⑤ 11-08 ~ 11-13</b><br/>DGX Spark 연동<br/>───<br/>llm-router · spark-switch<br/>Spark 벤치 · K8s 단계 A<br/>멀티모델 설계"]
+    P1 --> P2 --> P3 --> P4
+    P4 --> P5A
+    P4 --> P5B

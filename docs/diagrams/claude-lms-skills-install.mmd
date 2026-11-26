@@ -1,0 +1,11 @@
+%% install-claude-code.sh 의 skill 설치 단계 (CLAUDE-LMS-SKILLS.md 참고)
+flowchart TD
+    A["install-claude-code.sh 실행"] --> B{"~/.guardian-llm/venv/bin/python<br/>있음?"}
+    B -- 없음 --> B1["경고: 문서 skill 은 guardian 번들 설치 후 사용 가능<br/>(claude-lms 자체 설치는 계속)"]
+    B -- 있음 --> C["kit/skills/* → ~/.claude/skills/ 복사<br/>(hwpx · docx · xlsx · image)"]
+    C --> D["pip install --no-deps --no-index<br/>--target ~/.claude/skills/hwpx/lib<br/>python_hwpx-6.11.0 wheel"]
+    D --> E["kit/lib (document_generator 핵심 + 테마)<br/>→ ~/.local/share/claude-lms/lib"]
+    E --> F["vision-ocr → ~/.local/share/claude-lms/bin<br/>xattr -dr com.apple.quarantine"]
+    F --> G["자가 점검: 각 skill 'selftest'<br/>(import · sips · vision-ocr 실행)"]
+    B1 --> H["완료"]
+    G --> H

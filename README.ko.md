@@ -3,7 +3,9 @@
 [English](README.md) | 한국어
 
 인터넷이 차단된 Apple Silicon Mac(macOS arm64) 한 대에 로컬 AI 작업 환경을 **완전 오프라인으로**
-설치·운영하기 위한 번들 소스입니다.
+설치·운영하기 위한 번들 소스입니다. 제품은 **guardian 통합 번들**([`guardian/`](guardian/))이며,
+본체는 `.tar.xz` 하나이고, `install-llm-wiki.sh` 가 같이 받은 `.sha256` 으로 검증한 뒤 통째로 설치합니다. 저장소 루트에는 옛 단독 번들
+(openwebui-wiki)도 남아 있습니다([두 가지 번들](#두-가지-번들) 참고).
 
 - **LM Studio** — 모델을 로컬에서 실행 (채팅 Gemma-4-E4B, 임베딩 bge-m3)
 - **Open WebUI** — 채팅 화면
@@ -29,8 +31,11 @@ raw/ 에 원문 투입          →  LLM 변환  →  wiki/ 원자 노트  →  
 
 | 번들 | 구성 | 이 저장소만으로 빌드 | 문서 |
 | --- | --- | --- | --- |
-| openwebui-wiki 번들 (저장소 루트) | Open WebUI + wiki-mcp | 가능 | [`INSTALL.md`](INSTALL.md) |
-| 통합 번들 ([`guardian/`](guardian/)) | LM Studio(앱·모델) + Open WebUI + wiki-mcp + Claude Code(`claude-lms`) | 불가 — 기반 번들이 필요(아래) | [`guardian/README.md`](guardian/README.md), [`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md) |
+| 통합 번들 ([`guardian/`](guardian/)) — **제품** | LM Studio(앱·모델) + Open WebUI + wiki-mcp + Claude Code(`claude-lms`) | 불가 — 기반 번들이 필요(아래) | [`guardian/README.md`](guardian/README.md), [`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md) |
+| openwebui-wiki 번들 (저장소 루트) — 구 흐름(단독 번들) | Open WebUI + wiki-mcp | 가능 | [`INSTALL.md`](INSTALL.md) |
+
+통합 번들은 파일 세 개(`<이름>.tar.xz`, `<이름>.tar.xz.sha256`, `install-llm-wiki.sh`)로 설치합니다
+([빠른 시작](#빠른-시작) 참고).
 
 ### 저장소에 있는 것과 없는 것
 
@@ -39,6 +44,8 @@ raw/ 에 원문 투입          →  LLM 변환  →  wiki/ 원자 노트  →  
 - wiki-mcp 소스, openwebui-wiki 번들의 설치·패키징 스크립트
 - `guardian/build-merged-bundle.sh` — 기반 번들에 위키 계층, bge-m3 임베딩 모델, 공식 LM Studio dmg,
   Claude Code 를 더해 통합 번들을 만든다
+- `guardian/install-llm-wiki.sh`, `guardian/pack-bundle.sh` — 대상 Mac 용 원스텝 설치기와,
+  설치에 필요한 파일 세 개(`.tar.xz`, `.sha256`, 설치기)를 만드는 패커
 - `guardian/claude-lms`, `guardian/install-claude-code.sh` (LM Studio 위의 Claude Code)
 - 설치 문제 기록([`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md))과 매뉴얼
 
@@ -61,13 +68,25 @@ raw/ 에 원문 투입          →  LLM 변환  →  wiki/ 원자 노트  →  
 - 4B 모델은 에이전트 작업에 약합니다. 쓸 도구를 명시하고("calc.py 를 Read 로 읽고 Edit 로 고친 뒤 Bash 로
   실행") 결과를 매번 확인하세요.
 - 외부 통신 0건은 설계 목표이며, 완전 차단 상태에서의 검증은 남은 과제입니다.
-- 따로 설치하려면 `claude` 바이너리, 그 버전을 적은 `VERSION`, `install-claude-code.sh`, `claude-lms` 를
-  한 폴더에 두고 `./install-claude-code.sh` 를 실행합니다(통합 번들은 마지막 단계에서 이를 실행).
+- 따로 설치하려면 `claude` 바이너리, 그 버전을 적은 `VERSION`, `install-claude-code.sh`, `claude-lms`,
+  `claude-kit/` 를 한 폴더에 두고 `./install-claude-code.sh` 를 실행합니다(통합 번들은 마지막 단계에서 이를 실행).
+- 같은 설치기가 한글 문서 skill `hwpx`(읽기·Markdown→HWPX·양식 채우기)를 `~/.claude/skills/hwpx` 에 넣습니다
+  (`--no-skills` 로 생략). `claude-lms` 에서 `/hwpx …` 로 부릅니다. 자세한 내용은 [`docs/CLAUDE-LMS-MANUAL.md`](docs/CLAUDE-LMS-MANUAL.md).
+
+## 애드온 — skill-guard와 docgen
+
+- **skill-guard** — 각 skill 에 딸린 `PreToolUse` hook 입니다. 같은 세션에서 같은 `Skill` 이 다시
+  불리면 거부하고, 대신 실행할 Bash 명령을 알려 줍니다(작은 모델의 반복 호출 끊기). 자세한 내용은
+  [`docs/dev/CLAUDE-LMS-SKILLS.md`](docs/dev/CLAUDE-LMS-SKILLS.md) §6.5.
+- **docgen** — Open WebUI 채팅에서 docx/pptx/xlsx 를 만들어 다운로드 링크로 돌려주는 Tool 입니다.
+  `install-wiki.sh` 가 `open-webui-tools/`·`document-templates/` 를 `~/llm-wiki/` 에 넣고, Open WebUI 에
+  Tool 을 등록하는 일은 손으로 합니다. 안내는 [`docs/DOCUMENT-TOOL.md`](docs/DOCUMENT-TOOL.md).
 
 ## 완성 번들은 직접 만든다
 
-내려받을 완성 번들(Release)은 없습니다. 이 저장소에는 **소스와 빌드 스크립트만** 있고, 대용량 바이너리는
-git에 넣지 않습니다. 인터넷이 되는 빌드 Mac에서 번들을 만든 뒤 대상 Mac으로 옮깁니다.
+이 저장소 자체에는 내려받을 완성 번들(Release)이 없습니다. 저장소는 **소스와 빌드 스크립트만** 담고,
+대용량 바이너리는 git에 넣지 않습니다. 인터넷이 되는 빌드 Mac에서 번들을 만들어 대상 Mac으로 옮기고,
+관리자는 필요하면 자기 Gitea 서버의 Release 에 올립니다([배포 (관리자)](#배포-관리자) 참고).
 
 **openwebui-wiki 번들** — `openwebui-packages/`(macOS arm64, cp311·cp312 wheel)를 채운 뒤 `./package.sh`.
 
@@ -80,6 +99,8 @@ python3.12 -m pip download open-webui==0.12.3 mcpo==0.0.20 ./wiki-mcp -d openweb
 
 **통합 번들** — `build-llm-bundle.sh` 가 만든 기반 번들과 공식 LM Studio dmg 를
 `guardian/build-merged-bundle.sh` 로 합칩니다. 자세한 절차는 [`guardian/README.md`](guardian/README.md).
+빌드 마지막 단계(`guardian/pack-bundle.sh`)가 번들 옆에 대상 Mac 에 복사할 파일 세 개
+(`<이름>.tar.xz`, `<이름>.tar.xz.sha256`, `install-llm-wiki.sh`)를 만듭니다.
 
 ```bash
 guardian/build-merged-bundle.sh dist/build/<기반 번들> \
@@ -99,6 +120,23 @@ cd openwebui-wiki-bundle-<버전>-macos-arm64
 
 ## 빠른 시작
 
+**통합 번들(제품)** — 빌드에서 만든 파일 세 개(`<이름>.tar.xz`, `<이름>.tar.xz.sha256`,
+`install-llm-wiki.sh`)를 대상 Mac 의 한 폴더(예: `~/bundles`)에 복사하고 설치기를 돌립니다
+([`guardian/README.md`](guardian/README.md) 와 같은 명령).
+
+```bash
+cd ~/bundles                           # 세 파일을 복사한 폴더
+bash install-llm-wiki.sh --dry-run     # 체크섬·여유 공간 확인, 압축 풀기, 무엇을 할지 보기
+bash install-llm-wiki.sh               # 설치 + 기동 + LM Studio 첫 실행 + 위키 단계 재실행
+```
+
+sudo 도 다운로드도 필요 없습니다. 끝나면 Open WebUI 는 http://localhost:8080, 위키 서비스는
+LaunchAgent(`dev.guardian.*`)로 돌아갑니다. 설치 직후 확인과 도구 목록은
+[`docs/USAGE.md`](docs/USAGE.md) 를 보세요. raw → wiki 변환은 이미 설정되어 있고(LM Studio
+`127.0.0.1:1234` 로 직접 통신) API 키도 필요 없습니다.
+
+> **구 흐름(단독 번들)** — 저장소 루트의 번들을 손으로 설치:
+
 ```bash
 ./install.sh              # 오프라인 설치 (uv + 로컬 wheel) → .venv
 source .venv/bin/activate
@@ -107,24 +145,47 @@ open-webui serve          # http://localhost:8080
 ./run-wiki-mcp.sh watch   # raw/ 감시 → 위키화
 ```
 
-raw → wiki 변환은 기본으로 꺼져 있습니다. 먼저 `WIKI_INGEST_ENABLED=1`, `WIKI_INGEST_MODEL`,
-`WIKI_INGEST_API_KEY` 를 설정하세요(INSTALL.md 참고). 설정이 없으면 `watch` 는 재인덱싱만 합니다.
+이 번들에서는 raw → wiki 변환이 기본으로 꺼져 있습니다. 먼저 `WIKI_INGEST_ENABLED=1`,
+`WIKI_INGEST_MODEL`, `WIKI_INGEST_API_KEY` 를 설정하세요(INSTALL.md 참고). 설정이 없으면
+`watch` 는 재인덱싱만 합니다.
 
 ## 문서
 
 | 문서 | 내용 |
 | --- | --- |
-| [`INSTALL.md`](INSTALL.md) | **설치·설정** — 오프라인 설치, 도구 15개, 템플릿, raw 변환, 청킹, 문서추출, OCR |
+| [`guardian/README.md`](guardian/README.md) | **설치(현행, 통합 번들)** — 구성, `install-llm-wiki.sh` 흐름, 번들 만들기, 운영 |
+| [`docs/INSTALL-GUIDE.md`](docs/INSTALL-GUIDE.md) | **현장 설치 가이드(통합 번들)** — 준비물 세 파일, dry-run, 설치 7단계, 옵션, 설치 뒤 확인, 문제 해결 |
+| [`INSTALL.md`](INSTALL.md) | **설치(구 흐름·단독 번들, 참고용)** — 오프라인 설치, 도구 15개, 템플릿, raw 변환, 청킹, 문서추출, OCR |
 | [`docs/USAGE.md`](docs/USAGE.md) | **실사용 매뉴얼** — 설치 후 장치별 연동·검증·사용 (Open WebUI 연결) |
-| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **상시 운영** — 서비스 기동, launchd 자동 시작, 헬스체크, 백업 |
-| [`docs/TESTING.md`](docs/TESTING.md) | **테스트 전략** — 대상·우선순위·실행 |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **상시 운영(통합 번들)** — 서비스 구성, 매일 점검, 정지·시작 순서, 설정, 백업, 재인덱싱, 관리자 암호 초기화, 되돌리기, 장애 대응표 |
+| [`docs/CLAUDE-LMS-MANUAL.md`](docs/CLAUDE-LMS-MANUAL.md) | **claude-lms 매뉴얼** — 오프라인 Claude Code, `hwpx` skill, 오피스 skill(docx·xlsx·pptx, §11), skill-guard hook |
+| [`docs/dev/CLAUDE-LMS-SKILLS.md`](docs/dev/CLAUDE-LMS-SKILLS.md) | **skill 설계·시험 기록** — `hwpx` skill, skill-guard(§6.5), 실전 시험 라운드 |
+| [`docs/DOCUMENT-TOOL.md`](docs/DOCUMENT-TOOL.md) | **문서 생성기(docgen)** — Open WebUI 에 docx/pptx/xlsx Tool 등록 |
+| [`docs/LLM-ROUTER.md`](docs/LLM-ROUTER.md) | **llm-router (기본 설치)** — claude-lms 요청을 Spark 큰 모델과 LM Studio로 나눔, `spark-model`, 장애 시 동작 |
+| [`docs/dev/LLM-ROUTER-TESTING.md`](docs/dev/LLM-ROUTER-TESTING.md) | **llm-router·Spark 테스트** — 단위 테스트 묶음과 실행법 |
+| [`docs/dev/SPARK-BENCH-REPORT.md`](docs/dev/SPARK-BENCH-REPORT.md) | **DGX Spark 성능 측정** — 동시 요청별 처리량·지연, 수강 인원 환산, 강의 전 권고 |
+| [`docs/dev/TESTING.md`](docs/dev/TESTING.md) | **테스트 전략** — 대상·우선순위·실행 |
 | [`docs/KNOWLEDGE-BASE.md`](docs/KNOWLEDGE-BASE.md) | **지식 구축** — 원자 노트 원칙, 투입 전략, 품질 튜닝, 유지보수 |
 | [`docs/LM-STUDIO.md`](docs/LM-STUDIO.md) | **LM Studio 연동** — 채팅·Knowledge 임베딩·Wiki MCP 공동 사용, 에어갭 설정 |
 | [`docs/INSTALL-ISSUES.md`](docs/INSTALL-ISSUES.md) | **설치 문제 기록** — 클린 Mac 에서 만난 문제와 해결 |
 
+개발·시험 기록은 [`docs/dev/`](docs/dev/README.md)(공개, 현장 번들 제외), 내부 문서는 `docs/internal/`(현장 번들·공개본 모두 제외)에 있다.
+
 설치 후 처음 할 일은 [`docs/USAGE.md`](docs/USAGE.md)의 연동 체크리스트입니다.
 
 ## 사전 요구사항 (대상 장비에 미리 준비)
+
+**통합 번들(제품)** — [`guardian/README.md`](guardian/README.md) 기준:
+
+| 항목 | 비고 |
+| --- | --- |
+| macOS (Apple Silicon / arm64) | 설치기가 다른 플랫폼이면 거부 |
+| 디스크 여유 공간 | `.tar.xz` 압축 파일 크기의 2.5배 + 2GB 이상 |
+
+이 외에는 아무것도 필요 없습니다. sudo 도 다운로드도 없고, 클린 Mac 의 `/usr/bin/tar` 가
+`.tar.xz` 를 그대로 풉니다.
+
+> **구 흐름(단독 번들)** 요구사항:
 
 | 항목 | 비고 |
 | --- | --- |
@@ -136,7 +197,7 @@ raw → wiki 변환은 기본으로 꺼져 있습니다. 먼저 `WIKI_INGEST_ENA
 ## 저장소 구성 (소스만 보관)
 
 ```text
-INSTALL.md            # 전체 매뉴얼 (단일 기준)
+INSTALL.md            # 단독 번들 매뉴얼 (구 흐름 — 현행 설치 문서는 guardian/README.md)
 install.sh            # 원커맨드 오프라인 설치
 package.sh            # 배포용 번들(tar.gz) 생성
 run-wiki-mcp.sh       # wiki-mcp 실행기 (serve | mcpo | watch)

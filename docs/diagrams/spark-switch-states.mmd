@@ -1,0 +1,20 @@
+stateDiagram-v2
+  [*] --> unknown: 컨트롤러 시작
+  unknown --> ready: 기존 컨테이너 인수<br/>(라벨 또는 --served-model-name)
+  unknown --> switching: 인수했지만 아직 로딩 중<br/>(/v1/models에 이름 없음)
+  unknown --> switching: POST /switch
+  ready --> switching: POST /switch<br/>(쿨다운 120초, 기본 프로필은 예외)
+  ready --> switching: 유휴 30분 (기본 프로필이 아닐 때만)
+  switching --> ready: /v1/models에 대상 이름이 보임
+  state "recovering (state는 switching 유지)" as recovering
+  switching --> recovering: 실패 (종료 · 30분 초과 · Docker 오류 · 예기치 못한 예외)
+  switching --> failed: 대상이 기본 프로필인데 실패
+  recovering --> failed: 기본 프로필로 복구 성공<br/>(current=기본, last_error 남김)
+  recovering --> failed: 복구도 실패 (current=없음)
+  failed --> switching: POST /switch
+  note right of switching
+    교체 중 POST /switch → 409 already_switching
+  end note
+  note left of ready
+    같은 프로필 다시 요청 → 200 changed=false
+  end note

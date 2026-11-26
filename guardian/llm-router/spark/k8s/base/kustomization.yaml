@@ -1,0 +1,48 @@
+# Base for the spark-llm namespace.
+#
+# NOTE: kustomize refuses files outside the kustomization root, and the app
+# files live in the repository root (next to this k8s/ tree), so base/app/
+# does NOT exist in the repo. install-spark-k8s.sh copies the k8s tree into a
+# private staging dir and copies the five app files into <stage>/base/app/
+# before running `kubectl apply -k`.
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: spark-llm
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - hf-cache-pvc.yaml
+  - vllm-deployment.yaml
+  - vllm-service.yaml
+  - switch-deployment.yaml
+  - switch-service.yaml
+
+configMapGenerator:
+  - name: spark-switch-app
+    files:
+      - app/spark_switch.py
+      - app/spark_common.py
+      - app/spark_backend_docker.py
+      - app/spark_backend_kube.py
+      - app/profiles.json
+  - name: spark-switch-config
+    literals:
+      - BACKEND=kubernetes
+      - DEFAULT_PROFILE=qwen3-instruct
+      - IDLE_MINUTES=30
+      - IDLE_POLL_SECONDS=60
+      - COOLDOWN_SECONDS=120
+      - READY_TIMEOUT=1800
+      - READY_POLL_SECONDS=5
+      - UNSCHEDULABLE_SECONDS=120
+      - VLLM_URL=http://vllm-coder.spark-llm.svc:8000
+      - PROFILES_FILE=/app/profiles.json
+      - SWITCH_HOST=0.0.0.0
+      - SWITCH_PORT=8010
+      - K8S_NAMESPACE=spark-llm
+      - K8S_DEPLOYMENT=vllm-coder
+      - K8S_CONTAINER=vllm
+      - K8S_POD_SELECTOR=app=vllm-coder

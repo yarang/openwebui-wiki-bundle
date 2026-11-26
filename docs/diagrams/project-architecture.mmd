@@ -1,0 +1,22 @@
+%% 현재 구성 — PROJECT-STATUS.md §2. 교육용 Mac(에어갭) + 선택적 DGX Spark.
+flowchart LR
+    subgraph MAC["교육용 Mac (Apple Silicon · 오프라인)"]
+        OW["Open WebUI 0.12.3<br/>채팅 · Knowledge · docgen Tool"]
+        WM["wiki-mcp 0.2.4<br/>raw → wiki 원자 노트<br/>MCP 도구 15개 · OCR"]
+        CL["claude-lms<br/>(Claude Code 2.1.322)<br/>hwpx · docx · xlsx · pptx skill<br/>skill-guard hook"]
+        LMS["LM Studio :1234<br/>gemma-4-e4b · bge-m3"]
+        RT["llm-router :1240<br/>(선택, --with-router)"]
+    end
+    subgraph SPK["DGX Spark (선택)"]
+        SW["spark-switch :8010<br/>프로필 교체 · 30분 유휴 복귀"]
+        VL["vllm-coder :8000<br/>기본 qwen3-instruct"]
+    end
+    OW -->|"MCP (mcpo)"| WM
+    OW --> LMS
+    WM -->|"요약 · 임베딩"| LMS
+    CL -->|"Anthropic /v1/messages"| LMS
+    CL -.->|"라우터 사용 시"| RT
+    RT -->|"local-fast · 대체"| LMS
+    RT -->|"spark-large"| VL
+    RT -->|"/switch"| SW
+    SW --> VL

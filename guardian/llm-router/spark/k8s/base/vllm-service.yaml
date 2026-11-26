@@ -1,0 +1,17 @@
+# ServiceLB (k3s klipper) opens the node's :8000, same port as the Docker
+# install — the Mac side (llm-router, spark-model) keeps its address.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-coder
+  namespace: spark-llm
+  labels:
+    app: vllm-coder
+spec:
+  type: LoadBalancer
+  selector:
+    app: vllm-coder
+  ports:
+    - port: 8000
+      targetPort: 8000

@@ -1,0 +1,20 @@
+%% hwpx skill 구성 요소 — SKILL.md → bash 래퍼 → hwpx_tool.py → python-hwpx (CLAUDE-LMS-MANUAL.md §4)
+flowchart LR
+    subgraph SKILL["~/.claude/skills/hwpx/"]
+        MD["SKILL.md<br/>(모델이 읽는 사용 규칙)"]
+        subgraph SC["scripts/"]
+            WR["hwpx<br/>(bash 래퍼)"]
+            TO["hwpx_tool.py<br/>(명령 구현)"]
+        end
+        LIB["lib/hwpx_fields.py<br/>(+ 선택: python-hwpx)"]
+    end
+    MD -->|"Bash: $H 명령 …"| WR
+    WR -->|"① 파이썬 존재<br/>② 5초 실행 점검<br/>③ 심볼릭 링크 해석<br/>④ hwpx_tool.py 확인"| TO
+    TO --> C1["read"]
+    TO --> C2["from-md"]
+    TO --> C3["fields"]
+    TO --> C4["fill"]
+    TO --> C5["validate"]
+    C3 & C4 --> LIB
+    C1 & C2 & C3 & C4 & C5 --> PH["python-hwpx 6.11.0<br/>(HwpxDocument · hwp5 변환)"]
+    PH --> OUT["첫 줄: OK 경로 / ERROR 사유"]

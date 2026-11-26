@@ -622,6 +622,11 @@ def _run() -> None:
         # NOTE: FastMCP 1.28 의 streamable_http_app()은 path 인자를 받지 않음.
         # path는 settings.streamable_http_path에서 읽으므로 여기서 세팅.
         mcp.settings.streamable_http_path = WIKI_MCP_PATH
+        # stateless 로 돌린다: mcpo 중계가 서버 재시작 뒤에도 묵은 Mcp-Session-Id 를
+        # 계속 보내면 서버가 404 로 답하고 mcpo 가 "Session terminated" 500 에 영원히
+        # 갇힌다. 이 서버는 세션 상태(알림·sampling·lifespan) 없이 요청마다 독립 동작하므로
+        # 세션 ID 자체가 불필요하다 — stateless 면 재시작 직후 바로 200 이 된다.
+        mcp.settings.stateless_http = True
         app = mcp.streamable_http_app()
         install_auth(app, WIKI_MCP_API_KEY)
 

@@ -1,0 +1,28 @@
+flowchart TD
+  subgraph L1["1층 · 단위 테스트 (가짜 백엔드, 네트워크 0)"]
+    U1["라우터 36개<br/>httpx.MockTransport로 LM Studio·Spark·컨트롤러를 흉내"]
+    U2["Spark 221개<br/>가짜 Docker·Kubernetes API·시계<br/>패커·설치기는 PATH 앞의 가짜 명령으로 실행"]
+  end
+
+  subgraph L2["2층 · 로컬 실가동 점검 (비밀값 없음)"]
+    S1["router.py를 루프백 임시 포트(12401)에 띄움<br/>env -i · 임시 HOME · 키 없음"]
+    S2["/health · /v1/models · 403 · 415 · 400 · 폴백 확인<br/>끝나면 바로 종료"]
+    S1 --> S2
+  end
+
+  subgraph L3["3층 · 실환경 E2E (승인 필요, 미실시)"]
+    E1["prod-mac에 라우터 설치 + Spark 키"]
+    E2["spark-large 실제 응답 · X-Route: spark<br/>스트리밍 · 로컬 폴백"]
+    E3["컨트롤러 설치 후 spark-model use/default<br/>유휴 복귀"]
+    E4["오프라인 묶음 --verify · k3s 설치 (Stage B)<br/>외부 통신 차단 상태에서"]
+    E1 --> E2 --> E3
+    E4
+  end
+
+  L1 -->|"전부 통과해야"| L2
+  L2 -->|"사용자 승인 후"| L3
+
+  classDef done fill:#d4edda,stroke:#2e7d32
+  classDef todo fill:#fff3cd,stroke:#b8860b
+  class U1,U2,S1,S2 done
+  class E1,E2,E3,E4 todo

@@ -1,0 +1,20 @@
+sequenceDiagram
+  autonumber
+  participant B as 벤치 클라이언트<br/>(128 동시 스트림)
+  participant P as llm-router<br/>httpx 풀 (기본 100)
+  participant H as 헬스 루프<br/>(같은 풀 공유)
+  participant S as Spark vLLM
+  participant M as Mac LM Studio<br/>(gemma-4-e4b)
+
+  B->>P: 스트림 1~100
+  P->>S: 연결 100개 모두 사용 (스트림당 약 38초)
+  B->>P: 스트림 101~128
+  Note over P: 빈 연결 없음 → 대기
+  H->>P: /health 프로브용 연결 요청
+  P--xH: 10초 뒤 PoolTimeout
+  Note over H: spark down · local down 으로 오판<br/>(21:05:01 KST)
+  P--xB: 풀 대기 중이던 spark 요청 56건 → 502
+  B->>P: 이후 요청
+  P->>M: resolve() = local (spark-down) 100건
+  Note over M: 경량 모델 1대에 100건 몰림<br/>최대 904초 지연
+  S-->>B: 먼저 잡힌 spark 요청 100건은 정상 완료
