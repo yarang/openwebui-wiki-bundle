@@ -2,7 +2,7 @@
 
 Claude Code kit(`claude-code-kit-<버전>-<UTC시각>-macos-arm64.tar.gz`)을 받은 Mac에서 설치를 마치고 확인할 때까지의 순서를 정리한 문서다. 세부 설명은 기존 문서의 해당 절로 연결했다.
 
-- 기준 kit: `claude-code-kit-2.1.325-20261115T0414Z-macos-arm64` (2026-11-15)
+- 기준 kit: `claude-code-kit-2.1.325-20261125T2319Z-macos-arm64` (UTC 2026-11-25 23:19, 커밋 `2d8fca1`까지 반영)
 - 기준 설치처: 운영 Mac (claude-lms → llm-router `127.0.0.1:1240` → Spark, LM Studio는 폴백)
 
 ## 1. kit에 들어 있는 것
@@ -11,6 +11,8 @@ Claude Code kit(`claude-code-kit-<버전>-<UTC시각>-macos-arm64.tar.gz`)을 �
 |---|---|---|
 | `claude` | Anthropic 서명 Claude Code 바이너리 | `~/.local/share/claude/versions/<버전>`, 링크 `~/.local/bin/claude` |
 | `claude-lms` | Claude Code를 LM Studio·llm-router로 돌리는 래퍼 | `~/.local/bin/claude-lms`, 설정 `~/.config/claude-lms/env` |
+| `claude-vscode` | VS Code 확장이 `claude`를 부를 때 거치는 래퍼(`claudeCode.claudeProcessWrapper`). claude-lms와 같은 env를 읽어 도구 제한·축소 프롬프트를 붙인다(§6.1) | `~/.local/bin/claude-vscode` |
+| `claude-kit/system-prompt.md` | 로컬 모델용 축소 시스템 프롬프트(약 2.8k자). 설치만 되고 켜지는 않는다(§6.1) | `~/.config/claude-lms/system-prompt.md` |
 | `install-claude-code.sh` | 설치기 | — |
 | `claude-kit/skills/{hwpx,docx,xlsx,pptx}` | 문서 skill과 skill-guard hook | `~/.claude/skills/<이름>` |
 | `claude-kit/wheels/` | hwpx skill이 vendoring하는 python-hwpx 휠 | skill 안 |
@@ -48,7 +50,7 @@ shasum -a 256 -c <이름>.tar.gz.sha256 && tar xzf <이름>.tar.gz && cd <이름
 ```
 
 - 앞의 검사가 실패하면 뒤 단계는 실행되지 않는다. 실패하면 파일을 다시 받는다.
-- 2026-11-15 kit의 압축본 sha256은 `2ded1cf471f8ea00eca451949946d406149e03f19c15d65f6553942d7a2cce70`이다.
+- 기준 kit(20261125T2319Z)의 압축본 sha256은 `db6dd12a3f3a5e8ab1ccf45bd225ceb4fdbc1292e368744bc19f86bec0446cdb`이다.
 - USB·네트워크로 복사한 `claude`에는 quarantine 속성이 붙는다. 설치기가 서명(팀 `Q6L2SF6YDW`, 식별자 `com.anthropic.claude-code`)을 직접 확인한 뒤 그 파일 하나에서만 속성을 지운다. `xattr -cr`이나 Gatekeeper 끄기는 하지 않는다([INSTALL-ISSUES.md 1.11](INSTALL-ISSUES.md#111-usb네트워크로-복사한-바이너리의-quarantine)).
 
 ## 4. 설치
@@ -103,6 +105,8 @@ shasum -a 256 -c <이름>.tar.gz.sha256 && tar xzf <이름>.tar.gz && cd <이름
    - 여러 줄에 걸친 값이 있으면 줄 번호만 알려 주고 멈춘다(값은 출력하지 않는다).
    - `--with-router`이고 기존 파일에 `CLAUDE_LMS_ROUTER`가 없으면 `CLAUDE_LMS_ROUTER='http://127.0.0.1:<라우터 포트>'`를 더한다. 포트는 라우터 env의 `LLM_ROUTER_PORT`(기본 1240)다.
    - `--with-router`이고 기존 파일에 `CLAUDE_LMS_PICKER`가 없으면 `CLAUDE_LMS_PICKER='spark-large qwen3-coder local-fast qwen3-instruct'`를 더한다(VS Code 모델 선택 목록의 Opus·Sonnet·Haiku·Fable 행).
+   - 축소 시스템 프롬프트를 `~/.config/claude-lms/system-prompt.md`(644)로 복사한다. 내용이 다른 파일이 이미 있으면 `system-prompt.md.bak-<시각>`으로 옮겨 두고 바꾼다. 기존 파일에 `CLAUDE_LMS_SYSTEM_PROMPT_FILE` 줄이 없으면 그 키를 **주석으로** 한 줄 써 둔다. 켜는 것은 사용자가 한다(§6.1).
+   - `claude-vscode`를 `~/.local/bin`에 복사한다. VS Code add-on 설치기가 이 파일이 있을 때만 확장 설정에 등록한다([VSCODE-ADDON.md §4](VSCODE-ADDON.md#4-사용자-설정-settingsjson)).
 3. **skill.** `~/.claude/skills/<이름>`에 설치하고 각 skill을 시험 실행해 본다([CLAUDE-LMS-MANUAL.md §2.3](CLAUDE-LMS-MANUAL.md#23-hwpx-skill-설치)).
 4. **llm-router** (`--with-router`일 때만). kit의 `llm-router/install-llm-router.sh`를 같은 python으로 실행한다.
    - `~/.guardian-llm/llm-router/router.py`, `~/.local/bin/spark-model`, LaunchAgent `dev.guardian.llm-router`(로그 `~/.guardian-llm/logs`).
@@ -156,11 +160,12 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.guardian.llm-router.
 | `CLAUDE_LMS_PICKER` | VS Code 확장의 모델 선택 목록에 넣을 모델 id 1~4개(공백 구분, 순서대로 Opus·Sonnet·Haiku·Fable 행). VS Code 애드온 설치 때만 읽음 (라우터 모드) | 없음 | `install-vscode.sh --pick-models`가 알려 주는 값. [VSCODE-ADDON.md §4.1](VSCODE-ADDON.md#41-모델-선택-목록-고르기---pick-models) |
 | `CLAUDE_LMS_MAX_OUTPUT` | Claude Code 출력 토큰 상한 | 16384 | 16384 유지 |
 | `CLAUDE_LMS_DISALLOWED_TOOLS` | 모델에 보여 주지 않을 도구(쉼표 구분) | 없음(전부) | `'Workflow,ScheduleWakeup,ReportFindings,ListAgents'` |
+| `CLAUDE_LMS_SYSTEM_PROMPT_FILE` | Claude Code 기본 시스템 프롬프트 대신 쓸 파일(`--system-prompt-file`) | 없음(기본 프롬프트). 설치기는 주석 한 줄만 써 둔다 | `'/Users/<계정>/.config/claude-lms/system-prompt.md'` (§6.1) |
 | `CLAUDE_LMS_SKILL_GUARD` | `0`이면 skill-guard hook을 끔 | 켬 | 켠 채로 |
 
-**`CLAUDE_LMS_MAX_OUTPUT`을 16384로 두는 이유.** vLLM은 입력 + `max_tokens`가 로드된 창(65536)을 넘으면 400을 낸다. Claude Code 기본값 32000이면 입력 33,536 tok부터 400이 나고, 16384면 49,152 tok까지 괜찮다. 기본 프롬프트만 약 11k tok이다(SPARK-SETTINGS-MAP.md).
+**`CLAUDE_LMS_MAX_OUTPUT`을 16384로 두는 이유.** vLLM은 입력 + `max_tokens`가 로드된 창(65536)을 넘으면 400을 낸다. Claude Code 기본값 32000이면 입력 33,536 tok부터 400이 나고, 16384면 49,152 tok까지 괜찮다. 기본 프롬프트만 약 11k tok이다.
 
-**`CLAUDE_LMS_DISALLOWED_TOOLS` 권장값(deny4).** 쓰지 않는 도구 정의 4개를 빼서 첫 요청 입력이 10,952 → 7,537 tok(−31%)으로 준다. 시스템 프롬프트·hook·핵심 도구는 그대로다. 설치기는 이 값을 기본으로 넣지 않으므로 직접 한 줄 추가한다. 운영 Mac은 2026-11-15부터 이 값을 쓴다. 근거와 실제 프롬프트는 claude-code-prompt/README.md와 SPARK-USAGE-REVIEW-20261115.md §8·§9에 있다.
+**`CLAUDE_LMS_DISALLOWED_TOOLS` 권장값(deny4).** 쓰지 않는 도구 정의 4개를 빼서 첫 요청 입력이 10,952 → 7,537 tok(−31%)으로 준다. 시스템 프롬프트·hook·핵심 도구는 그대로다. 설치기는 이 값을 기본으로 넣지 않으므로 직접 한 줄 추가한다. 운영 Mac은 2026-11-15부터 이 값을 쓴다. 실제 프롬프트와 측정 방법은 저장소의 `docs/dev/claude-code-prompt/`(프롬프트 원문 기록, 설치본·공개본에 없음)에 있다.
 
 ```bash
 CLAUDE_LMS_DISALLOWED_TOOLS='Workflow,ScheduleWakeup,ReportFindings,ListAgents'
@@ -169,6 +174,22 @@ CLAUDE_LMS_DISALLOWED_TOOLS='Workflow,ScheduleWakeup,ReportFindings,ListAgents'
 - `--bare`는 시스템 프롬프트를 두 줄로 줄이고 skill-guard hook까지 꺼서 쓰지 않는다.
 - 재설치하면 `CLAUDE_LMS_*` 줄은 남지만 주석은 사라진다. 메모가 필요하면 이 문서나 운영 기록에 남긴다.
 - `CLAUDE_LMS_TOKEN`도 쓸 수 있지만 LM Studio·라우터 모두 기본값이면 따로 두지 않는다. 값을 넣었다면 출력하지 않는다.
+
+### 6.1 축소 시스템 프롬프트 (`CLAUDE_LMS_SYSTEM_PROMPT_FILE`)
+
+Claude Code의 기본 시스템 프롬프트(약 5.8k자)는 Claude 모델 이름을 나열한다. 그래서 라우터 뒤의 로컬 모델이 자기를 Claude라고 답했다. kit의 축소 프롬프트(약 2.8k자)는 모델이 라우터 별칭 뒤에서 도는 공개 모델이라고 밝히고, 확인·사실대로 보고하기 규칙은 남기고, 오피스 파일은 skill로 다루게 한다(커밋 `8564916`·`fdac999`·`9b378fc`).
+
+설치기는 파일만 깔고 켜지 않는다. 켜려면 env 파일에 설치기가 써 둔 주석 줄의 `# `를 지운다. 값은 이 Mac의 절대 경로 그대로 둔다.
+
+```bash
+CLAUDE_LMS_SYSTEM_PROMPT_FILE='/Users/<계정>/.config/claude-lms/system-prompt.md'
+```
+
+- **claude-lms**: 값이 있으면 `--system-prompt-file`로 넘긴다. 파일이 없거나 읽을 수 없으면 실행 전에 멈춘다. 명령줄에 `--system-prompt`·`--system-prompt-file`·`--bare`를 직접 주면 그쪽이 이긴다.
+- **VS Code 확장**: `claude-vscode` 래퍼가 같은 env를 읽어 같은 값을 붙인다. 파일이 없으면 경고만 내고 기본 프롬프트로 돈다. 새 대화부터 적용된다.
+- **끄기**: 그 줄을 지우거나 다시 주석으로 만든다. 재설치해도 이미 적어 둔 값(빈 값 포함)은 그대로 남는다.
+- **측정**(운영 Mac, 2026-11-25, Claude Code 2.1.326, Spark `qwen3-instruct`): 첫 요청 입력 11,133 → 6,951 tok(−38%), 같은 코딩 과제의 누적 입력 59.8K → 29.8K tok, 코딩 과제는 둘 다 통과. 다만 시스템 프롬프트가 줄어든 양(약 3k자)은 약 0.7k tok에 해당해(4.2자/tok 환산) 이 차이를 다 설명하지 못한다. 축소 쪽에 deny4가 함께 켜져 있었던 것으로 보이지만, 비교 조건이 작업 기록에 남아 있지 않아 확정하지 못했다. −38%는 '축소 프롬프트 + deny4를 켠 운영 설정'과 '기본'의 차이로 읽는다. 이름 문제는 분명히 고쳐졌다. 모델 이름을 물으면 기본 프롬프트는 Claude라고 답했고, 축소 프롬프트는 Claude가 아니라고 답했다(`9b378fc` 뒤 6회 모두 자연스러운 한국어). hwpx skill 예시 문구를 베끼는 실수는 기본 4회 중 1회, 축소 6회 중 0회였다(`fdac999`). 이 숫자들은 작업 기록과 커밋 메시지에서 옮긴 것이고 원본 로그는 저장소에 없다.
+- 운영 Mac은 2026-11-25부터 claude-lms와 VS Code 모두 켜 두었다.
 
 ## 7. macOS 로컬 네트워크 권한 (macOS 15 이상)
 
@@ -224,7 +245,7 @@ cp -p ~/.config/claude-lms/env ~/.config/claude-lms/env.bak-$(date +%Y%m%d-%H%M%
 ```
 
 - 모델만 바꾸려면 `./install-claude-code.sh --model=<id>`를 다시 실행하거나 env 파일의 `CLAUDE_LMS_MODEL`을 고친다.
-- Claude Code를 올린 뒤에는 실제 프롬프트가 달라질 수 있다. 다시 기록하는 방법은 claude-code-prompt/README.md의 "다시 기록하기"에 있다.
+- Claude Code를 올린 뒤에는 실제 프롬프트가 달라질 수 있다. 다시 기록하는 방법은 저장소의 `docs/dev/claude-code-prompt/README.md`(프롬프트 원문 기록, 설치본·공개본에 없음)의 "다시 기록하기"에 있다.
 
 ## 10. 문제가 생기면
 
@@ -235,7 +256,7 @@ cp -p ~/.config/claude-lms/env ~/.config/claude-lms/env.bak-$(date +%Y%m%d-%H%M%
 | `spark-large`가 로컬로만 감, Spark 다운, 교체 실패 | [LLM-ROUTER.md §4](LLM-ROUTER.md#4-장애-시-동작) |
 | 라우터 로그 | `~/.guardian-llm/logs/` |
 | skill-guard가 막은 이유 | [CLAUDE-LMS-MANUAL.md §3.4](CLAUDE-LMS-MANUAL.md#34-skill-guard-hook) |
-| 400 오류(입력이 창을 넘음), 출력 상한 | SPARK-SETTINGS-MAP.md, SPARK-USAGE-REVIEW-20261115.md |
+| 400 오류(입력이 창을 넘음), 출력 상한 | §6의 `CLAUDE_LMS_MAX_OUTPUT` 설명, [LLM-ROUTER.md §3.3](LLM-ROUTER.md#33-vs-code-확장) |
 | VS Code 확장에서 쓰기 | [CLAUDE-LMS-MANUAL.md §3.5](CLAUDE-LMS-MANUAL.md#35-vs-code에서-쓰기), [LLM-ROUTER.md §3.3](LLM-ROUTER.md#33-vs-code-확장) |
 | VS Code가 없는 현장 Mac에 VS Code·Foam·확장 설치 | [VSCODE-ADDON.md](VSCODE-ADDON.md) (별도 add-on) |
 | 현장 Mac에서 HWP·HWPX 열어 보기(오프라인 뷰어 HOP) | [guardian/hop-viewer/README.md](../guardian/hop-viewer/README.md) (별도 꾸러미) |
@@ -250,4 +271,4 @@ guardian/pack-claude-code.sh
 
 - 서명, 휠 sha256, 비밀 파일·심볼릭 링크 부재를 검사하고, 다시 풀어 `SHA256SUMS`가 맞을 때만 완성한다.
 - 옵션(`--claude-code=`, `--out=`, `--name=`, `--no-tar`)과 검사 내용은 [CLAUDE-LMS-MANUAL.md §2.2](CLAUDE-LMS-MANUAL.md#22-claude-code만-따로-설치재설정)에 있다.
-- `guardian/claude-lms`나 설치기를 바꿨다면 kit을 다시 만들고 SPARK-SETTINGS-MAP.md의 해시를 고친다.
+- `guardian/claude-lms`나 설치기를 바꿨다면 kit을 다시 만들고 저장소의 `docs/internal/SPARK-SETTINGS-MAP.md`(내부 문서)에 적힌 해시를 고친다.

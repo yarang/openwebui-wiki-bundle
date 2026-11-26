@@ -95,6 +95,22 @@ for l in wiki-mcp wiki-mcpo openwebui wiki-watch; do launchctl bootstrap "$D" "$
 > 멈추고 `launchctl kickstart -k "$D/dev.guardian.openwebui"`.
 > `launchctl print gui/<uid>` 는 그 계정으로 실행해야 보입니다.
 
+### 4.1 재부팅 뒤
+
+§2 의 서비스는 모두 **사용자 LaunchAgent** 라 그 계정으로 화면 로그인을 해야 뜹니다. 전원만 들어오고 로그인 화면에
+멈춰 있으면 Open WebUI·mcpo·wiki-mcp·llm-router 가 하나도 뜨지 않습니다. FileVault 를 켠 Mac 은 자동 로그인을 쓸 수
+없으므로, 재부팅할 때마다 사람이 다음 순서를 밟습니다(2026-11-25 운영 Mac 에서 원인을 확인했고, 로그인 뒤
+`spark-large` 가 정상으로 돌아왔습니다).
+
+1. **디스크 잠금 해제.** Mac 앞에서 로그인 화면에 암호를 넣거나, 원격이면 SSH 로 접속합니다. FileVault Mac 은 재부팅
+   직후 SSH 접속이 잠금 해제 화면으로 뜨고, 암호를 넣으면 `System successfully unlocked` 를 찍은 뒤 연결이 끊깁니다.
+   부팅이 끝날 때까지 기다렸다가 다시 접속합니다.
+2. **화면 로그인.** 잠금 해제만으로는 LaunchAgent 가 뜨지 않습니다. Mac 앞에서, 또는 화면 공유(`vnc://<Mac 주소>`)로
+   서비스를 설치한 계정에 로그인합니다. SSH 셸 접속은 화면 로그인이 아닙니다.
+3. **LM Studio.** 앱이 서버와 함께 떴는지 봅니다(§3 의 `lm studio ok`). 안 떴으면 앱을 엽니다.
+4. **점검.** §3 의 명령을 차례로 돌리고, 라우터를 쓰는 Mac 은 §9 의 `/health` 에서 Spark 가 up 인지 확인합니다.
+   로컬 네트워크 권한은 재부팅해도 유지되지만, `ConnectError` 가 보이면 §9 대로 다시 확인합니다.
+
 ## 5. 설정
 
 | 파일 | 내용 | 바꾼 뒤 |
@@ -175,6 +191,13 @@ spark-model status                      # 외부 서버의 모델·상태·유�
 - VS Code 의 Claude Code 확장은 claude-lms 와 달리 라우터가 죽으면 LM Studio 로 넘어가지 않습니다.
 - `spark-large` 가 늘 local 로 가면 라우터 env 의 `SPARK_API_KEY` 가 비었거나 Spark 가 꺼진 것입니다. 번들 폴더에서
   `--spark-env=FILE` 로 다시 설치하거나 `~/.config/llm-router/env`(600)를 고친 뒤 라우터를 재시작합니다.
+- **Spark 이름이 Wi-Fi 주소로도 풀리는 경우.** 라우터는 Spark 를 mDNS 이름(`spark.local`)으로 찾습니다. Spark 에
+  유선과 Wi-Fi 가 함께 붙어 있으면 이 이름이 Wi-Fi 주소로도 풀려, Mac 이 Wi-Fi 쪽으로 붙었다 끊기기를 반복할 수
+  있습니다(2026-11-26 운영에서 발생). 그래서 Spark 의 avahi 가 유선 인터페이스로만 이름을 알리도록 바꿔 두었습니다.
+  - 실제로 읽히는 설정 파일은 `/etc/avahi/avahi-daemon-dgx-spark.conf` 입니다(`nvidia-spark-avahi-conf` 패키지가 지정하며,
+    기본 `avahi-daemon.conf` 는 읽지 않습니다).
+  - 바꾼 값: `allow-interfaces=enP7s7`, `deny-interfaces` 에 `wlP9s9` 추가. 원본은 같은 폴더의 `.bak-20261126` 입니다.
+  - **Spark 패키지를 업데이트한 뒤에는 이 두 줄이 남아 있는지 확인합니다.** 패키지가 파일을 되돌릴 수 있습니다.
 
 ## 10. 되돌리기
 
@@ -202,6 +225,7 @@ spark-model status                      # 외부 서버의 모델·상태·유�
 | 검색이 키워드로만 됨 | `/v1/models`, `http.log` 의 `❌` | LM Studio 서버 켜기 → `reindex` |
 | raw 에 넣은 파일이 안 바뀜 | `watch.log`, `raw/.failed/` | 모델이 목록에 있는지 확인. id 충돌이면 노트 id 를 고쳐 다시 넣기 |
 | 응답이 갑자기 엉망 | LM Studio 의 로드된 context 크기 | [INSTALL-ISSUES.md](INSTALL-ISSUES.md) 1.1·1.2 |
+| 재부팅 뒤 서비스가 하나도 안 뜸 | 화면 로그인을 했는지 | §4.1 순서대로 잠금 해제 → 화면 로그인 |
 | 재부팅 뒤 임베딩이 안 됨 | LM Studio 가 서버와 함께 뜨는지 | 앱을 한 번 열고 `wiki-layer/install-wiki.sh` 다시 실행 |
 | VS Code 의 Claude 가 응답 없음 | §9 `/health` | `kickstart -k` llm-router (확장은 LM Studio 로 넘어가지 않음) |
 | `spark-large` 가 늘 local 로 감 | §9 `/health`, 라우터 env 의 키 | `--spark-env=FILE` 로 다시 설치하거나 env 를 고친 뒤 라우터 재시작 |
@@ -217,7 +241,7 @@ spark-model status                      # 외부 서버의 모델·상태·유�
 
 ## 13. 향후 개선 후보
 
-아직 구현하지 않은 항목입니다. 전체 로드맵은 PROJECT-STATUS.md §6 을 봅니다.
+아직 구현하지 않은 항목입니다.
 
 - **변환 비동기화** — watch 의 감시와 변환 작업 분리 (대량 투입 때 막힘 해소)
 - **재시도 정책** — `raw/.failed/` 자동 재시도 (모델 일시 오류 대응)

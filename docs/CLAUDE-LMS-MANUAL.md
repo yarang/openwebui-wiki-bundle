@@ -9,7 +9,7 @@ guardian 번들에 들어 있는 **오프라인 Claude Code(claude-lms)** 와 �
   - [INSTALL-GUIDE.md](INSTALL-GUIDE.md): 설치
   - [OPERATIONS.md](OPERATIONS.md): 운영
   - [LM-STUDIO.md](LM-STUDIO.md): 모델
-  - [CLAUDE-LMS-SKILLS.md](dev/CLAUDE-LMS-SKILLS.md): skill 설계와 구현·시험 기록
+  - [CLAUDE-LMS-SKILLS.md](dev/CLAUDE-LMS-SKILLS.md)(개발 문서, 설치본에 없음): skill 설계와 구현·시험 기록
 - 그림: 모든 그림은 `diagrams/`에 Mermaid 원본(`.mmd`)과 SVG를 따로 둡니다. 그림을 고칠 때는 `.mmd`를 고친 뒤 다시 렌더합니다. 명령은 `docs/` 폴더에서 실행합니다.
 
 ```bash
@@ -124,7 +124,7 @@ guardian/pack-claude-code.sh --claude-code=/경로/claude --out=/다른/폴더 -
 shasum -a 256 -c <이름>.tar.gz.sha256 && tar xzf <이름>.tar.gz && cd <이름> && shasum -a 256 -c SHA256SUMS && ./install-claude-code.sh
 ```
 
-스크립트는 `COPYFILE_DISABLE=1`로 macOS tar가 `._*` 확장 속성 파일을 끼워 넣지 않게 합니다. 2026-11-10 운영 Mac에 같은 구성의 묶음으로 2.1.321과 skill-guard를 설치했습니다([CLAUDE-LMS-SKILLS.md §6.5](dev/CLAUDE-LMS-SKILLS.md#65-skill-guard-pretooluse-hook-2026-11-09)).
+스크립트는 `COPYFILE_DISABLE=1`로 macOS tar가 `._*` 확장 속성 파일을 끼워 넣지 않게 합니다. 2026-11-10 운영 Mac에 같은 구성의 묶음으로 2.1.321과 skill-guard를 설치했습니다([CLAUDE-LMS-SKILLS.md §6.5](dev/CLAUDE-LMS-SKILLS.md#65-skill-guard-pretooluse-hook-2026-11-09), 개발 문서).
 
 ### 2.3 hwpx skill 설치
 
@@ -323,7 +323,7 @@ claude-lms가 hook을 붙이지 **않는** 경우: `CLAUDE_LMS_SKILL_GUARD=0`, s
 
 사용자가 직접 입력한 `/hwpx …`는 Skill 도구 호출이 아니어서 hook을 거치지 않습니다. 그래서 모델이 처음 스스로 부르는 `Skill(hwpx)`는 허용되고, 그다음부터 거부됩니다.
 
-시험 Mac(Claude Code 2.1.319)에서 hook이 붙는 것, 기존 사용자 hook과 함께 실행되는 것, 거부 이유가 `PreToolUse:Skill hook error: …` 도구 결과로 모델에 전달되고 모델이 다음 차례에 그 명령을 Bash로 부르는 것을 확인했습니다([CLAUDE-LMS-SKILLS.md §6.5](dev/CLAUDE-LMS-SKILLS.md#65-skill-guard-pretooluse-hook-2026-11-09)).
+시험 Mac(Claude Code 2.1.319)에서 hook이 붙는 것, 기존 사용자 hook과 함께 실행되는 것, 거부 이유가 `PreToolUse:Skill hook error: …` 도구 결과로 모델에 전달되고 모델이 다음 차례에 그 명령을 Bash로 부르는 것을 확인했습니다([CLAUDE-LMS-SKILLS.md §6.5](dev/CLAUDE-LMS-SKILLS.md#65-skill-guard-pretooluse-hook-2026-11-09), 개발 문서).
 
 알려진 한계:
 - hook은 호출 **전에** 기록하므로, 첫 Skill 호출이 권한 거부 등으로 실패해도 "읽음"으로 칩니다.

@@ -9,11 +9,8 @@ prod-mac의 Claude Code(claude-lms, VS Code 확장)가 주소 하나(`http://127
 - 모델 교체 순서: [diagrams/spark-switch-sequence.mmd](diagrams/spark-switch-sequence.mmd)
 - 컨트롤러 상태: [diagrams/spark-switch-states.mmd](diagrams/spark-switch-states.mmd)
 - 구성 요소 문서: [guardian/llm-router/README.md](../guardian/llm-router/README.md), [guardian/llm-router/spark/README.md](../guardian/llm-router/spark/README.md)
-- 설정이 어느 파일에서 정해지고 언제 읽히는지(env·profiles.json·클라이언트, 배포본 확인 포함): SPARK-SETTINGS-MAP.md
-- 실제 사용 패턴 대비 구성 검토(2026-11-15, 400 원인·폴백·coder 슬롯 활용): SPARK-USAGE-REVIEW-20261115.md
-- 7명 강의·Isaac Sim 병행 구성 제안과 부하 실측: SPARK-CLASS-ISAAC-PLAN.md
-- DGX 쪽을 k3s(쿠버네티스)로 옮기는 설계안: SPARK-K8S-DESIGN.md. 아직 DGX에 적용하지 않았고, 이 문서의 Docker 설치가 현재 기준이다.
-- Spark에 코딩·비전 모델을 동시에 띄우는 설계안과 모델 검토: SPARK-MULTI-MODEL-DESIGN.md. 구현 전이다.
+- 테스트와 성능 측정: [LLM-ROUTER-TESTING.md](dev/LLM-ROUTER-TESTING.md), [SPARK-BENCH-REPORT.md](dev/SPARK-BENCH-REPORT.md). 둘 다 개발 문서라 설치본에는 없다.
+- 설정 위치 지도, 2026-11-15 사용 패턴 검토, 강의·Isaac Sim 병행 계획, k3s·다중 모델 설계안은 저장소의 `docs/internal/`(내부 문서, 설치본·공개본에 없음)에 있다. k3s·다중 모델은 설계안일 뿐이고, 이 문서의 Docker 설치가 현재 기준이다.
 
 ---
 
@@ -125,7 +122,7 @@ spark-model use pair                   # default와 같다. use qwen3-coder / us
 - 대형 모델(`gpt-oss-120b`, `qwen3-next-80b`, `qwen3-vl-30b`)은 누군가 `spark-model use <이름>`을 실행할 때만 올라간다. 이때 **두 상주 모델이 모두 내려가** 그동안 다른 사람의 `qwen3-coder` 요청은 400(올라가 있지 않음), `spark-large`는 대형 모델로 간다.
 - 대형 모델은 30분 동안 요청이 없으면 페어로 돌아간다. 바로 돌리려면 `spark-model default`.
 - 컨트롤러는 슬롯을 내린 뒤 `MemAvailable`이 두 슬롯 util 합 × 전체 메모리 + `MEM_MARGIN_GB`(4 GiB) 이상이 될 때까지 기다리고(`MEM_WAIT_TIMEOUT=600`초, phase `waiting-memory`), slot0이 준비된 뒤 slot1을 띄운다(phase `creating <이름>` · `loading <이름>`).
-- 설정은 Spark `~/spark-switch/env`의 `DEFAULT_PROFILE=pair`, `RESIDENT_PROFILES=qwen3-instruct,qwen3-coder`. 페어를 끄려면 두 줄을 지우고 `DEFAULT_PROFILE=qwen3-instruct`로 둔 뒤 컨트롤러를 다시 띄운다(단독이면 util 0.60이 최적이었다, [SPARK-BENCH-REPORT.md](dev/SPARK-BENCH-REPORT.md)).
+- 설정은 Spark `~/spark-switch/env`의 `DEFAULT_PROFILE=pair`, `RESIDENT_PROFILES=qwen3-instruct,qwen3-coder`. 페어를 끄려면 두 줄을 지우고 `DEFAULT_PROFILE=qwen3-instruct`로 둔 뒤 컨트롤러를 다시 띄운다(단독이면 util 0.60이 최적이었다, 개발 문서 [SPARK-BENCH-REPORT.md](dev/SPARK-BENCH-REPORT.md)).
 
 ![모델 교체 순서](diagrams/spark-switch-sequence.svg)
 
@@ -164,7 +161,7 @@ VS Code 확장은 claude-lms를 거치지 않으므로 `settings.json`의 `claud
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL` | `local-fast` |
 | `CLAUDE_CODE_SUBAGENT_MODEL` | `spark-large` |
 | `CLAUDE_CODE_MAX_CONTEXT_TOKENS` | `65536` 그대로. 어떤 요청이든 로컬로 넘어갈 수 있으니 로컬 창에 맞춘다. |
-| `CLAUDE_CODE_MAX_OUTPUT_TOKENS` | `16384` (11-15 추가). vLLM은 `입력 + max_tokens > 65536`이면 400을 낸다. 기본 32000이면 입력 33,536부터, 16384면 49,152부터다(기본 프롬프트 실측 약 11k, 검토 §3·§8). claude-lms는 `CLAUDE_LMS_MAX_OUTPUT`(기본 16384)로 같은 값을 넣는다. |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS` | `16384` (11-15 추가). vLLM은 `입력 + max_tokens > 65536`이면 400을 낸다. 기본 32000이면 입력 33,536부터, 16384면 49,152부터다(기본 프롬프트 실측 약 11k, 2026-11-15 내부 검토). claude-lms는 `CLAUDE_LMS_MAX_OUTPUT`(기본 16384)로 같은 값을 넣는다. |
 
 `ANTHROPIC_AUTH_TOKEN`은 그대로 둔다. 라우터는 클라이언트 토큰을 버리고 목적지별 키를 붙인다.
 라우터가 꺼져 있으면 확장은 연결 오류를 낸다(claude-lms처럼 자동으로 LM Studio에 붙지 않는다). 그때는 `ANTHROPIC_BASE_URL`을 `:1234`로 되돌린다.
@@ -196,7 +193,7 @@ VS Code 확장은 claude-lms를 거치지 않으므로 `settings.json`의 `claud
 
 | 항목 | 상태 |
 |---|---|
-| `gpt-oss-120b`, `qwen3-next-80b`, `qwen3-vl-30b` 프로필 | 메모리 비율·최대 길이·도구 파서가 추정값이다(`verified: false`). `gpt-oss-120b`는 2026-11-14에 한 번 올려 짧은 응답과 tool_use를 확인했고, 2026-11-15에 7명 동시 부하(34k 토큰 프롬프트 포함)를 쟀다(SPARK-CLASS-ISAAC-PLAN.md §1). 2026-11-24에는 운영 Mac에서 `spark-model use <이름> --wait`로 세 프로필을 차례로 올리고 라우터로 짧은 질문을 보냈다(KST). `qwen3-vl-30b` 3분 55초(14:51:59–14:55:54, 답 `VL OK`, 이미지는 아래 행), `qwen3-next-80b` 10분 26초(14:59:00–15:09:26, `17×3` → `51`), `gpt-oss-120b` 8분 35초(15:11:59–15:20:34, `51`). 셋 다 교체가 실패 없이 끝났고 응답은 200에 `X-Route: spark`였으며, `spark-large`도 그 모델로 갔다. 끝으로 `spark-model default --wait`로 기본 페어로 되돌렸다(15:20:37–15:29:53, 9분 16초). 라우터는 그 10초 뒤(15:30:03) 두 모델을 다시 보았고, `spark-large`(→ `qwen3-instruct`)와 `qwen3-coder` 모두 `51`로 답했다. 그전 11-21·22에도 다른 세션의 벤치가 컨트롤러 API로 세 프로필을 올린 기록이 있다(응답 내용 기록은 없음). 짧은 응답만 봤으므로 긴 입력·도구 호출용 값은 여전히 추정이고 `verified: false`는 그대로 두었다. Isaac Sim 병행용 `gpt-oss-120b-lite`(util 0.65)와 `qwen3-coder-solo`(util 0.45)는 2026-11-15에 올려 부하까지 쟀으므로 `verified: true`다(같은 문서 §2–3). |
+| `gpt-oss-120b`, `qwen3-next-80b`, `qwen3-vl-30b` 프로필 | 메모리 비율·최대 길이·도구 파서가 추정값이다(`verified: false`). `gpt-oss-120b`는 2026-11-14에 한 번 올려 짧은 응답과 tool_use를 확인했고, 2026-11-15에 7명 동시 부하(34k 토큰 프롬프트 포함)를 쟀다(내부 문서인 강의·Isaac 병행 계획 §1). 2026-11-24에는 운영 Mac에서 `spark-model use <이름> --wait`로 세 프로필을 차례로 올리고 라우터로 짧은 질문을 보냈다(KST). `qwen3-vl-30b` 3분 55초(14:51:59–14:55:54, 답 `VL OK`, 이미지는 아래 행), `qwen3-next-80b` 10분 26초(14:59:00–15:09:26, `17×3` → `51`), `gpt-oss-120b` 8분 35초(15:11:59–15:20:34, `51`). 셋 다 교체가 실패 없이 끝났고 응답은 200에 `X-Route: spark`였으며, `spark-large`도 그 모델로 갔다. 끝으로 `spark-model default --wait`로 기본 페어로 되돌렸다(15:20:37–15:29:53, 9분 16초). 라우터는 그 10초 뒤(15:30:03) 두 모델을 다시 보았고, `spark-large`(→ `qwen3-instruct`)와 `qwen3-coder` 모두 `51`로 답했다. 그전 11-21·22에도 다른 세션의 벤치가 컨트롤러 API로 세 프로필을 올린 기록이 있다(응답 내용 기록은 없음). 짧은 응답만 봤으므로 긴 입력·도구 호출용 값은 여전히 추정이고 `verified: false`는 그대로 두었다. Isaac Sim 병행용 `gpt-oss-120b-lite`(util 0.65)와 `qwen3-coder-solo`(util 0.45)는 2026-11-15에 올려 부하까지 쟀으므로 `verified: true`다(같은 계획 §2–3). |
 | vLLM 0.15.1의 Anthropic `/v1/messages`가 이미지 블록을 받는지 | **확인: 받지 못한다**(2026-11-24 14:56 KST, `qwen3-vl-30b`, 라우터 경유). 64×64 빨간색 PNG를 Anthropic 이미지 블록으로 보내면 `source.type: base64`는 400 `The URL must be either a HTTP, data or file URL.`, `source.type: url`(data URL)은 400 `multi_modal_data['image'][0] is empty …`였다. 같은 이미지를 `/v1/chat/completions`의 `image_url`(data URL)로 보내면 200에 답이 `Red`였다(`X-Route: spark`). 그래서 이미지 작업은 `/v1/chat/completions`로 보낸다(3단계 skill에서 다룸). Claude Code처럼 `/v1/messages`만 쓰는 클라이언트는 Spark에서 이미지를 넘길 수 없다. |
 | Spark에서의 실제 교체·유휴 복귀 | **확인**(2026-11-12, 2026-11-15, 2026-11-21·22). 2026-11-12에 `qwen3-coder`로 교체 301초, 기본 프로필 복귀 272초를 쟀다([§2](#2-설치-순서), 그때는 `IDLE_MINUTES=3`). 2026-11-15에는 `gpt-oss-120b` → 페어 유휴 복귀를 봤다. 동시 요청 4건(전체 46 tok/s)을 보낸 뒤 약 31분에 교체가 시작되고 약 39분에 페어가 `ready`가 됐다. 지금 값 `IDLE_MINUTES=30`으로 2026-11-21·22에 두 번 더 봤다(컨트롤러 로그, KST). ① `qwen3-next-80b`가 11-21 23:29:36에 컨트롤러 재시작으로 인수됐다. 30분 뒤 23:59:36에 `idle for 30 minutes; returning to pair`가 찍혔고, 11-22 00:08:50에 페어 `ready`(reason=idle, 약 9분)가 됐다. ② `qwen3-next-80b-nvfp4`는 11-22 15:18:26에 `ready`가 됐다. 16:06:40에 같은 줄이 찍혔고, 16:16:09에 페어 `ready`(reason=idle, 약 9.5분)가 됐다. 운영 Mac 라우터 로그의 Spark down·up 시각도 이와 맞는다. |
 | 운영 Mac에서의 라우터 실가동 | **확인**(2026-11-12). `--load`로 설치했고, 로컬 네트워크 권한을 허용한 뒤 `/health`가 `spark.up: true`, `/v1/messages`가 200에 `X-Route: spark`였다. 성능은 배포한 `router.py`를 시험 포트 :1242로 띄워 쟀다. 연결 풀·열린 파일 한도를 고친 뒤 동시 128에서 256/256 성공([SPARK-BENCH-REPORT.md](dev/SPARK-BENCH-REPORT.md#841-수정-후-재검증-2026-11-12)). 2026-11-24에 [LLM-ROUTER-TESTING.md](dev/LLM-ROUTER-TESTING.md) §7 점검표 1–7번을 항목별로 다시 판정했다(스트리밍 `message_stop`까지, Claude Code 별칭 분기, 교체 중 503 + `Retry-After`). 8·9번(Stage B)은 하지 않았다. 결과는 그 문서 §7. |
@@ -212,7 +209,7 @@ python -m unittest discover -s guardian/llm-router/tests -v          # 라우터
 python3 -m unittest discover -s guardian/llm-router/spark/tests -v   # 컨트롤러 (표준 라이브러리만)
 ```
 
-테스트 목록, 실행 환경, 로컬 실가동 점검 절차, 실환경 E2E 점검표는 [LLM-ROUTER-TESTING.md](dev/LLM-ROUTER-TESTING.md)에 있습니다. 매니페스트 테스트는 PyYAML이 없으면 건너뛰어지니 결과의 skip 수를 확인하세요.
+테스트 목록, 실행 환경, 로컬 실가동 점검 절차, 실환경 E2E 점검표는 [LLM-ROUTER-TESTING.md](dev/LLM-ROUTER-TESTING.md)(개발 문서, 설치본에 없음)에 있습니다. 매니페스트 테스트는 PyYAML이 없으면 건너뛰어지니 결과의 skip 수를 확인하세요.
 
 ## 8. 설계안과 달라진 점
 

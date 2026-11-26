@@ -286,7 +286,7 @@ claude-lms -p "/docx 주간 보고서를 워드로 만들어 줘. 추진 실적 
 - skill은 이렇게 직접 실행할 수도 있습니다(모델이 쓰는 명령과 같습니다): `~/.claude/skills/docx/scripts/docx from-md ./주간보고.md`
 
 자세한 사용법과 제한은 [`CLAUDE-LMS-MANUAL.md`](CLAUDE-LMS-MANUAL.md)(§3 claude-lms, §3.4 skill-guard, §5 hwpx, §11 오피스 skill)를 보세요.
-설계와 실전 시험 기록은 [`CLAUDE-LMS-SKILLS.md`](dev/CLAUDE-LMS-SKILLS.md)에 있습니다.
+설계와 실전 시험 기록은 [`CLAUDE-LMS-SKILLS.md`](dev/CLAUDE-LMS-SKILLS.md)(개발 문서, 설치본에 없음)에 있습니다.
 
 ### (선택) 큰 모델: llm-router
 

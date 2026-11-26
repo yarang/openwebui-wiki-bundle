@@ -2,10 +2,11 @@
 
 인터넷과 VS Code가 없는 현장 Mac에 VS Code, Foam, Claude Code 확장을 함께 설치하는 꾸러미다. 2026-11-19부터 통합 번들에도 `vscode-addon/` 폴더로 들어가 `install-all.sh` 6/7 단계가 자동으로 돌린다(§3.3). 단독 꾸러미는 이미 설치된 Mac에 더하거나 새 버전으로 바꿀 때 따로 옮긴다. 묶는 방식은 docgen add-on(`make-docgen-kit.sh`)을 따랐다.
 
-- 기준 add-on: VS Code 1.146.0, Foam 0.48.0, Claude Code 확장 2.1.325 (2026-11-15)
-  - `vscode-addon-1.146.0-cc2.1.325-20261115T0613Z-macos-arm64.tar.gz` (488 MB)
-  - sha256 `af77c4723e3a96c03ddf315505af894cc36313f55b67274f84aff8f16d47b86b`
-  - 인수 시험 62/62 통과(보내는 Mac에서 격리 설치). 시험 Mac 오프라인 설치·첫 실행·headless 응답 통과, Claude 패널 GUI 대화는 아직(§9).
+- 기준 add-on: VS Code 1.146.0, Foam 0.48.0, Claude Code 확장 2.1.325 (UTC 2026-11-25 23:19, 커밋 `2d8fca1`까지 반영)
+  - `vscode-addon-1.146.0-cc2.1.325-20261125T2319Z-macos-arm64.tar.gz` (488 MB)
+  - sha256 `9442154b721523ded615abedf7a57a69c5d6a39eda54339d68a23179eb819ed3`
+  - 11-15판 대비 바뀐 점: 확장 설정에 `claude-vscode` 래퍼를 등록해 도구 제한·축소 프롬프트가 확장에도 적용된다(§4, 커밋 `8564916`). 이미 더 새 Claude Code 확장이 깔려 있으면 내리지 않는다(§3.1, 커밋 `7bac747`). 라우터 모드의 모델 선택 목록 기본값이 네 행이 됐다(§4.1, 커밋 `2d8fca1`).
+  - 인수 시험(`accept_vscode_addon`·`accept_claude_vscode`·`test_vscode_model_picker`)은 커밋 `7bac747`에서 통과했다. 2319Z 빌드 자체를 다시 시험한 기록은 확인하지 못했다. 시험 Mac 현장 시험은 11-15판으로 한 것이다(§9).
 - 설치 스크립트 안내(현장용): [guardian/vscode-addon/README.md](../guardian/vscode-addon/README.md)
 - 확장의 환경 변수가 왜 필요한지: [CLAUDE-LMS-MANUAL.md §3.5](CLAUDE-LMS-MANUAL.md#35-vs-code에서-쓰기)
 
@@ -57,7 +58,7 @@ tar -xzf vscode-addon-<이름>.tar.gz && cd vscode-addon-<이름>
 |---|---|---|
 | 0 | `SHA256SUMS` 확인, `MANIFEST.env` 읽기 | — |
 | 1 | dmg를 읽기 전용으로 붙여 버전·bundle id·서명·팀을 확인한 뒤 앱을 복사한다. 복사본에서만 quarantine을 지우고 서명을 다시 확인한 다음 제자리로 옮긴다. 옛 버전은 `Visual Studio Code.old-<버전>.app`으로 옮겨 두고 지우지 않는다 | `same or newer: kept` |
-| 2 | `code --install-extension <vsix> --force`로 두 확장 설치 | `already installed` |
+| 2 | 깔린 확장 버전을 `--list-extensions --show-versions`로 읽고, 없거나 더 낮을 때만 `code --install-extension <vsix> --force`로 설치한다. 같거나 더 새 확장은 그대로 둔다 | `same or newer … kept` |
 | 3 | 확장 안 `claude` 바이너리의 서명·identifier·팀을 확인하고, quarantine이 있으면 그 파일에서만 지운다 | `no quarantine` |
 | 4 | 사용자 `settings.json` 작성(§4) | 내용이 있으면 옆 파일 |
 | 5 | 위키에 `.vscode/settings.json`, `.foam/templates/new-note.md` 작성. 노트는 건드리지 않는다 | 옆에 `*.vscode-addon` |
@@ -96,7 +97,8 @@ tar -xzf vscode-addon-<이름>.tar.gz && cd vscode-addon-<이름>
 넣는 값:
 
 - **오프라인 항목**: 텔레메트리 끄기, 자동 업데이트·확장 업데이트 확인 끄기, 실험 기능·자연어 설정 검색 끄기, npm·JSON 스키마·TypeScript 형식 내려받기 끄기, git autofetch 끄기.
-- **Claude 항목**: `claudeCode.disableLoginPrompt: true`, 그리고 아래 환경 변수.
+- **Claude 항목**: `claudeCode.disableLoginPrompt: true`, 아래 환경 변수, 그리고 `claudeCode.claudeProcessWrapper`.
+  - `claudeProcessWrapper`는 Claude Code kit이 깐 `~/.local/bin/claude-vscode`가 있을 때만 절대 경로로 넣는다(확장은 `~`를 풀지 않는다). 확장은 이 래퍼를 거쳐 `claude`를 부르고, 래퍼는 `~/.config/claude-lms/env`의 `CLAUDE_LMS_DISALLOWED_TOOLS`·`CLAUDE_LMS_SYSTEM_PROMPT_FILE`을 `--disallowedTools`·`--system-prompt-file`로 붙인다. 설치 스크립트는 두 키가 래퍼로 적용되는지, 래퍼가 없어 적용되지 않는지만 알리고 값은 출력하지 않는다. 축소 프롬프트를 켜는 법은 [CLAUDE-CODE-KIT-INSTALL.md §6.1](CLAUDE-CODE-KIT-INSTALL.md#61-축소-시스템-프롬프트-claude_lms_system_prompt_file)에 있다.
 
 | 변수 | 라우터 모드 (`CLAUDE_LMS_ROUTER` 있음) | 직접 모드 |
 |---|---|---|
@@ -169,7 +171,7 @@ CLAUDE_LMS_PICKER='qwen3-coder spark-large local-fast'
 
 ## 6. 알아 둘 제한
 
-- **도구 제한이 확장에는 적용되지 않는다.** `CLAUDE_LMS_DISALLOWED_TOOLS`는 claude-lms가 `--disallowedTools`로 넘기는 값이다. 확장에는 해당 설정이 없다. 그래서 확장의 첫 요청은 터미널의 claude-lms보다 길다(claude-code-prompt).
+- **도구 제한·축소 프롬프트는 래퍼가 있어야 적용된다.** 확장 자체에는 해당 설정이 없다. `claude-vscode`가 없는 Mac(Claude Code kit 없이 이 꾸러미만 설치)에서는 두 값이 확장에 적용되지 않아 첫 요청이 터미널의 claude-lms보다 길다. 래퍼를 등록하거나 env를 고친 뒤에는 새 대화부터 반영된다.
 - **폴백이 없다.** claude-lms는 라우터가 응답하지 않으면 LM Studio로 넘어간다. 확장은 settings.json에 적힌 주소 하나만 쓴다. 라우터가 내려가 있으면 확장에서 오류가 난다([LLM-ROUTER.md §3.3](LLM-ROUTER.md#33-vs-code-확장)).
 - **토큰은 쓰지 않는다.** settings.json에는 `lmstudio`만 쓴다. LM Studio에 인증을 켰다면 직접 모드에서 토큰을 손으로 넣어야 한다. 설치 스크립트가 경고한다. 라우터는 클라이언트 토큰을 보지 않는다.
 - **새 노트.**

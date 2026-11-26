@@ -157,7 +157,7 @@ open-webui serve          # http://localhost:8080
 | [`docs/INSTALL-GUIDE.md`](docs/INSTALL-GUIDE.md) | **현장 설치 가이드(통합 번들)** — 준비물 세 파일, dry-run, 설치 7단계, 옵션, 설치 뒤 확인, 문제 해결 |
 | [`INSTALL.md`](INSTALL.md) | **설치(구 흐름·단독 번들, 참고용)** — 오프라인 설치, 도구 15개, 템플릿, raw 변환, 청킹, 문서추출, OCR |
 | [`docs/USAGE.md`](docs/USAGE.md) | **실사용 매뉴얼** — 설치 후 장치별 연동·검증·사용 (Open WebUI 연결) |
-| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **상시 운영(통합 번들)** — 서비스 구성, 매일 점검, 정지·시작 순서, 설정, 백업, 재인덱싱, 관리자 암호 초기화, 되돌리기, 장애 대응표 |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **상시 운영(통합 번들)** — 서비스 구성, 매일 점검, 정지·시작 순서, 재부팅 뒤 절차, 설정, 백업, 재인덱싱, 관리자 암호 초기화, 되돌리기, 장애 대응표 |
 | [`docs/CLAUDE-LMS-MANUAL.md`](docs/CLAUDE-LMS-MANUAL.md) | **claude-lms 매뉴얼** — 오프라인 Claude Code, `hwpx` skill, 오피스 skill(docx·xlsx·pptx, §11), skill-guard hook |
 | [`docs/dev/CLAUDE-LMS-SKILLS.md`](docs/dev/CLAUDE-LMS-SKILLS.md) | **skill 설계·시험 기록** — `hwpx` skill, skill-guard(§6.5), 실전 시험 라운드 |
 | [`docs/DOCUMENT-TOOL.md`](docs/DOCUMENT-TOOL.md) | **문서 생성기(docgen)** — Open WebUI 에 docx/pptx/xlsx Tool 등록 |

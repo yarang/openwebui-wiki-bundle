@@ -104,7 +104,7 @@ tail -f ~/llm-wiki/logs/mcpo.log ~/llm-wiki/logs/watch.log
 
 ## Claude Code 시스템 프롬프트 축소 (CLAUDE_LMS_SYSTEM_PROMPT_FILE · claude-vscode)
 
-Claude Code 의 기본 시스템 프롬프트는 약 5.8k자로 Claude 모델 이름들을 나열하고, 로컬 모델에게 Claude 를 참침하게 만든다. `install-claude-code.sh` 는 `claude-kit/system-prompt.md` (로컬 모델용 짧은 프롬프트)를 `~/.config/claude-lms/system-prompt.md` 로 설치한다(다른 파일이 이미 있으면 `system-prompt.md.bak-<시각>` 으로 보존한 뒤 바꾼다). **기본적으로 꺼져 있다** — 켜는 것은 `~/.config/claude-lms/env` 의 한 줄이고, 설치기가 힌트 주석을 같이 써 둔다:
+Claude Code 의 기본 시스템 프롬프트는 약 5.8k자로 Claude 모델 이름들을 나열하고, 로컬 모델에게 Claude 를 참칭하게 만든다. `install-claude-code.sh` 는 `claude-kit/system-prompt.md` (로컬 모델용 짧은 프롬프트)를 `~/.config/claude-lms/system-prompt.md` 로 설치한다(다른 파일이 이미 있으면 `system-prompt.md.bak-<시각>` 으로 보존한 뒤 바꾼다). **기본적으로 꺼져 있다** — 켜는 것은 `~/.config/claude-lms/env` 의 한 줄이고, 설치기가 힌트 주석을 같이 써 둔다:
 
 ```bash
 # ~/.config/claude-lms/env — 설치기가 써 둔 힌트의 주석을 풀면 켜진다(값은 이 Mac 의 절대 경로 그대로)
@@ -115,7 +115,7 @@ Claude Code 의 기본 시스템 프롬프트는 약 5.8k자로 Claude 모델 �
 
 VS Code 확장은 `claude-lms` 를 거치지 않으므로, 같은 env 파일을 읽어 같은 인자(`--disallowedTools`, `--system-prompt-file`)를 붙이는 `claude-vscode` 래퍼를 `~/.local/bin` 에 깔고 `install-vscode.sh` 가 설정의 `claudeCode.claudeProcessWrapper` 로 등록한다(래퍼가 있을 때만, `~` 없는 절대 경로). 확장은 `<래퍼> <번들 claude 경로> <인자...>` 로 부르고, 첫 인자가 없으면 `~/.local/bin/claude` 로 폴백한다. CLI 와 달리 프롬프트 파일이 없거나 읽을 수 없어도 경고만 내고 확장은 계속 동작한다. 진단용으로 `CLAUDE_VSCODE_WRAPPER_LOG=<파일 경로>` 를 환경에 주면 실행마다 인자 한 줄을 그 파일에 남긴다(환경값은 절대 기록하지 않는다).
 
-측정 근거와 도구 거부 목록(`CLAUDE_LMS_DISALLOWED_TOOLS`)의 실측은 `../docs/internal/SPARK-USAGE-REVIEW-20261115.md` §8–§9 에 있다.
+켜는 법과 2026-11-25 측정(모델 이름 문제 해결, 첫 요청 입력 감소와 그 비교 조건)은 [`../docs/CLAUDE-CODE-KIT-INSTALL.md`](../docs/CLAUDE-CODE-KIT-INSTALL.md) §6.1 에 있다. 도구 거부 목록(`CLAUDE_LMS_DISALLOWED_TOOLS`)의 실측 원본은 내부 문서 `docs/internal/SPARK-USAGE-REVIEW-20261115.md` §8–§9 에 있다.
 
 ## 알려진 제약
 

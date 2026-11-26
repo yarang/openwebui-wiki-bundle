@@ -162,7 +162,7 @@ reindexes.
 | [`docs/INSTALL-GUIDE.md`](docs/INSTALL-GUIDE.md) | **Field install guide (integrated bundle)**: the three files, dry-run, the 7 install steps, options, post-install checks, troubleshooting |
 | [`INSTALL.md`](INSTALL.md) | **Install (old standalone-bundle flow, reference)**: offline install, the 15 tools, templates, raw conversion, chunking, extraction, OCR |
 | [`docs/USAGE.md`](docs/USAGE.md) | **User manual**: connecting and checking each part after install (Open WebUI) |
-| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **Operations (integrated bundle)**: service map, daily checks, stop/start order, settings, backups, reindexing, admin password reset, rollback, incident table |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | **Operations (integrated bundle)**: service map, daily checks, stop/start order, restart after a reboot, settings, backups, reindexing, admin password reset, rollback, incident table |
 | [`docs/CLAUDE-LMS-MANUAL.md`](docs/CLAUDE-LMS-MANUAL.md) | **claude-lms manual**: offline Claude Code on LM Studio, the `hwpx` skill, the office skills (docx, xlsx, pptx; §11), the skill-guard hook |
 | [`docs/dev/CLAUDE-LMS-SKILLS.md`](docs/dev/CLAUDE-LMS-SKILLS.md) | **Skills design and test log**: the `hwpx` skill, skill-guard (§6.5), the live test rounds |
 | [`docs/DOCUMENT-TOOL.md`](docs/DOCUMENT-TOOL.md) | **Document generator (docgen)**: registering the docx/pptx/xlsx Tool in Open WebUI |
